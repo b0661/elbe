@@ -191,14 +191,26 @@
           </documentation>
         </annotation>
       </element>
-      <element name="primary_proxy" type="string" minOccurs="0" maxOccurs="1">
-        <annotation>
-          <documentation>
-            proxy to access the debian mirror
-            e.g. "http://me:mypass@myproxy:8080"
-          </documentation>
-        </annotation>
-      </element>
+      <choice minOccurs="0" maxOccurs="1">
+	<element name="primary_proxy" type="string" minOccurs="0" maxOccurs="1">
+	  <annotation>
+	    <documentation>
+	      proxy to access the debian mirror
+	      e.g. "http://me:mypass@myproxy:8080"
+	    </documentation>
+	  </annotation>
+	</element>
+	<element name="apt-cacher" type="string" minOccurs="0" maxOccurs="1">
+	  <annotation>
+	    <documentation>
+	      Use an apt-cacher cache server to access the debian mirrors. String is prepended to the mirror url.
+	      e.g. "LOCALMACHINE:3142" for apt-cacher(ng) running on host as daemon.
+	      e.g. "apt-cacher-server:3142" for apt-cacher running as daemon
+	      e.g. "apt-cacher-server:3142/apt-cacher" for apt-cacher running in a web server
+	    </documentation>
+	  </annotation>
+	</element>
+      </choice>
       <element name="cdrom" type="string" minOccurs="0" maxOccurs="1">
         <annotation>
           <documentation>
@@ -216,6 +228,42 @@
     </sequence>
   </complexType>
 
+  <complexType name="repository-pkg-list">
+    <annotation>
+      <documentation>
+      List of debian packages to be added to the repository.
+      </documentation>
+    </annotation>
+    <sequence>
+      <element name="pkg-source" type="string" minOccurs="0" maxOccurs="unbounded">
+        <annotation>
+          <documentation>
+          Describes the debian package source and the component.
+	  E.g. "http://debian.linutronix.de/elbe-testing/pool/main/e/elbe-bootstrap/elbe-bootstrap_1.0_amd64.deb main" 
+          </documentation>
+        </annotation>
+      </element>
+    </sequence>
+  </complexType>
+ 
+  <complexType name="repository">
+    <annotation>
+      <documentation>
+      Specification of the project package repository that is shared between the initvm and the host.
+      </documentation>
+    </annotation>
+    <sequence>
+      <element name="pkg-list" type="rfs:repository-pkg-list" minOccurs="0">
+        <annotation>
+          <documentation>
+          List of debian packages to be added to the repository by elbe init.
+          </documentation>
+        </annotation>
+      </element>
+    </sequence>
+  </complexType>      
+      
+      
   <complexType name="initvm">
     <annotation>
       <documentation>
@@ -223,6 +271,13 @@
       </documentation>
     </annotation>
     <sequence>
+      <element name="directory" type="string" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+            Working directory on host (default is ./build).
+          </documentation>
+        </annotation>
+      </element>
       <element name="buildtype" type="string" minOccurs="0" maxOccurs="1">
         <annotation>
           <documentation>
@@ -278,6 +333,31 @@
         <annotation>
           <documentation>
             size of the virtual harddisk used to run the build environment
+          </documentation>
+        </annotation>
+      </element>
+      <element name="repository" type="rfs:repository" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+          Project debian package repository that is shared between the initvm and the host.
+	  The repository is automagically added to the list of debian mirrors within initvm: 
+	  deb file:///media/elbe-repo [suite] main.
+          The host may access the repository by e.g. deb file:/.../project directory/.elbe-repo/ [suite] main
+          </documentation>
+        </annotation>
+      </element>
+      <element name="share-list" type="rfs:share-list" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+          Directory paths that are shared between the initvm/ build environment and the host.
+          From the initvm/ build environment the share may be accessed by /media/[id]
+          </documentation>
+        </annotation>
+      </element>
+      <element name="clone-list" type="rfs:clone-list" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+          Directories that are cloned from the host to the initvm/ build environment.
           </documentation>
         </annotation>
       </element>
@@ -1640,4 +1720,114 @@
       </element>
     </sequence>
   </complexType>
+
+  <complexType name="share">
+    <annotation>
+      <documentation>
+        Describes a shared directory.
+      </documentation>
+    </annotation>
+    <sequence>
+      <element name="id" type="string" minOccurs="1" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Identifier of the shared directory.
+              Becomes the initvm/ build environment path to the share.
+              E.g. /media/[id]
+          </documentation>
+        </annotation>
+      </element>
+      <element name="host-path" type="string" minOccurs="1" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Host path to shared directory. 
+          </documentation>
+        </annotation>
+      </element>
+    </sequence>
+  </complexType>
+  
+  <complexType name="share-list">
+    <annotation>
+      <documentation>
+        List of directory paths to be shared.
+      </documentation>
+    </annotation>
+    <sequence>
+      <element name="share" type="rfs:share" minOccurs="0" maxOccurs="unbounded">
+        <annotation>
+          <documentation>
+            A shared directory.
+          </documentation>
+        </annotation>
+      </element>
+    </sequence>
+  </complexType>
+  
+  <complexType name="clone">
+    <annotation>
+      <documentation>
+        Describes a directory to be cloned.
+      </documentation>
+    </annotation>
+    <sequence>
+      <element name="id" type="string" minOccurs="1" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Identifier of the clone directory.
+              Becomes the initvm/ build environment path to a intermediate share e.g. /media/[id] that is used to
+	      clone the host directory.
+          </documentation>
+        </annotation>
+      </element>
+      <element name="host-path" type="string" minOccurs="1" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Host path to directory to be cloned. 
+          </documentation>
+        </annotation>
+      </element>
+      <element name="initvm-path" type="string" minOccurs="1" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Initvm path to clone host directory to.
+          </documentation>
+        </annotation>
+      </element>
+      <element name="exclude" type="string" minOccurs="0" maxOccurs="unbounded">
+        <annotation>
+          <documentation>
+              Exclude something from beeing cloned. Path must be relative  (leading / means host-path).
+	      See rsync exclude for more details.
+          </documentation>
+        </annotation>
+      </element>
+      <element name="include" type="string" minOccurs="0" maxOccurs="unbounded">
+        <annotation>
+          <documentation>
+              Include something to be cloned. Path must be relative (leading / means host-path).
+	      See rsync include for more details.
+          </documentation>
+        </annotation>
+      </element>
+    </sequence>
+  </complexType>
+  
+  <complexType name="clone-list">
+    <annotation>
+      <documentation>
+        List of directory paths to be cloned.
+      </documentation>
+    </annotation>
+    <sequence>
+      <element name="clone" type="rfs:clone" minOccurs="0" maxOccurs="unbounded">
+        <annotation>
+          <documentation>
+            A cloned directory.
+          </documentation>
+        </annotation>
+      </element>
+    </sequence>
+  </complexType>
+
 </schema>

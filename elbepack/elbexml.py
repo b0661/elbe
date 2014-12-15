@@ -23,6 +23,8 @@ from elbepack.xmldefaults import ElbeDefaults
 from base64 import standard_b64decode
 from tempfile import NamedTemporaryFile
 
+from urlparse import urlsplit
+
 class ValidationError(Exception):
     def __init__(self):
         Exception.__init__(self)
@@ -78,6 +80,23 @@ class ElbeXML(object):
 
         return True
 
+    def _mirror_spec(self, uri, localmachine):
+        ''' Create appropriate mirror specification including additional info for e.g. apt-cacher. '''
+	url = urlsplit(uri.strip())
+	mirror_spec = ""
+	if url.scheme == "" or url.scheme == "file":
+	    # sanitize file url (abs path).
+	    # make shure file scheme is available
+	    mirror_spec += "file://%s" % (os.path.normpath(url.path))
+	elif self.prj.has("mirror/apt-cacher") and url.scheme == "http":
+	    # Only http requests can be rerouted via apt-cacher
+	    mirror_spec += "http://%s/" % self.prj.text("mirror/apt-cacher").strip()
+	    mirror_spec += url.hostname
+	    mirror_spec += url.path
+	else:
+	    mirror_spec += url.geturl()
+	return mirror_spec.replace("LOCALMACHINE", localmachine)
+      
     def get_primary_mirror (self, cdrompath):
         if self.prj.has("mirror/primary_host"):
             m = self.prj.node("mirror")
@@ -89,11 +108,12 @@ class ElbeXML(object):
         elif self.prj.has("mirror/cdrom") and cdrompath:
             mirror = "file://%s" % cdrompath
 
-        return mirror.replace("LOCALMACHINE", "10.0.2.2")
+        return self._mirror_spec(mirror, "10.0.2.2")
 
 
     # XXX: maybe add cdrom path param ?
     def create_apt_sources_list (self):
+        ''' Create apt sources.list for project. '''
         if not self.prj.has("mirror") and not self.prj.has("mirror/cdrom"):
             return "# no mirrors configured"
 

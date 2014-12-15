@@ -70,43 +70,9 @@ d-i shared/mailname string localhost
 d-i quik-installer/oldworld_warning boolean true
 d-i quik-installer/non_oldworld_warning boolean true
 
-%if prj.has("mirror/primary_host"):
-d-i apt-setup/use_mirror      boolean true
-d-i mirror/country            string manual
-d-i mirror/http/hostname string ${prj.text("mirror/primary_host").replace("LOCALMACHINE", "10.0.2.2")}
-d-i mirror/http/directory string ${prj.text("mirror/primary_path")}
-d-i mirror/http/directory string ${prj.text("mirror/primary_path")}
-d-i mirror/http/proxy string ${http_proxy}
-d-i mirror/protocol string ${prj.text("mirror/primary_proto")}
-%endif
-
-<% i=0 %>
-% if prj.node("mirror/url-list"):
-% for n in prj.node("mirror/url-list"):
-<% tmp = n.text("binary").replace("LOCALMACHINE", "10.0.2.2") %>
-d-i apt-setup/local${i}/repository string ${tmp.strip()}
-d-i apt-setup/local${i}/comment string local server
-d-i apt-setup/local${i}/source boolean true
-#d-i apt-setup/local${i}/key string http://local.server/key
-<% i+=1 %>
-% endfor
-% endif
-% if prj.node("mirror/cdrom"):
-base-config apt-setup/uri_type select cdrom
-base-config apt-setup/cd/another boolean false
-base-config apt-setup/another boolean false
-%  if not prj.has("mirror/primary_host"):
-apt-mirror-setup apt-setup/use_mirror boolean false
-%  endif
-% endif
+${mirror_preseed}
 
 d-i finish-install/reboot_in_progress note
-d-i pkgsel/include string elbe-buildenv openssh-client qemu-elbe-user-static \
-% for n in pkgs:
-% if n.tag == "pkg":
-  ${n.et.text} \
-% endif
-% endfor
 
 passwd passwd/root-password password root
 passwd passwd/root-password-again password root

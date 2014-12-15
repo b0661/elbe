@@ -14,9 +14,11 @@ SYNOPSIS
 	[ --buildtype <buildtype> ] \
 	[ --debug ] \
 	[ --directory <directory> ] \
+        [ --include-pkg <package> <component> ] \
 	[ --proxy <addr> ] \
 	[ --skip-cds ] \
 	[ --skip-validation ] \
+        [ --guiport <port> ] \
 	<xmlfile>
 
 DESCRIPTION
@@ -52,6 +54,12 @@ OPTIONS
 	The location of the project directory. If this option isn't given, a directory
 	'build' is created in the current working directory. The directory must not
 	exist.
+        
+--include-pkg <package> <component>:: 
+        Include a debian package (.deb, .dsc, .changes) in the local package repository of
+        the project. The option may be given several times for multiple packages. Instead of
+        the option a directive in the ELBE XML file may be given (section <initvm><repository>).
+        The project package repository can be accessed from the host and from the build VM.
 
 --proxy <addr>::
 	Override the HTTP proxy setting specified in the XML file.
@@ -62,6 +70,11 @@ OPTIONS
 
 --skip-validation::
 	Skip the validation of the XML file. (Not recommended)
+        
+--guiport <port>::
+	TCP port for web access to the elbe daemons running in the elbe build environment.
+        On the host and within the VM build environment a elbe daemon can be accessed by
+        http://localhost:<port>/daemon_name. The port defaults to 8080.
 
 <xmlfile>::
 	The XML describing the Elbe project.

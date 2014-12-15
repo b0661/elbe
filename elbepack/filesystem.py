@@ -27,7 +27,7 @@ from glob import glob
 from elbepack.asciidoclog import CommandError
 from elbepack.version import elbe_version
 from elbepack.hdimg import do_hdimg
-from elbepack.fstab import fstabentry
+from elbepack.fstab import fstabentry, Fstab, FstabLine
 
 class Filesystem(object):
     def __init__(self, path, clean=False):
@@ -321,6 +321,30 @@ class ChRootFilesystem(Filesystem):
         if self.exists ("/etc/apt/apt.conf.orig"):
             os.system ('mv %s %s' % (self.fname ("etc/apt/apt.conf.orig"),
                                      self.fname ("etc/apt/apt.conf")))
+            
+    def __mount_shared_directories(self):
+        ''' Mount the directories that are shared from the host.
+
+        Shared directories are identified by the 9p file system type of the initvm /etc/fstab.
+        '''
+        initvm_fstab = Fstab()
+        
+        initvm_fstab.read("/etc/fstab")
+        
+        self.__shared_directories = []
+        for line in initvm_fstab.lines:
+            if line.has_filesystem() and line.fstype == "9p":
+                shared_mountpoint = "%s/media/%s" % (self.path, line.label)
+                if not os.path.isdir(shared_mountpoint):
+                    os.makedirs(shared_mountpoint)
+                os.system ("mount -o bind %s %s" % (line.mountpoint, shared_mountpoint))
+                self.__shared_directories.append(shared_mountpoint)
+        
+    def __umount_shared_directories(self):
+        ''' Unmount the directories that are shared from the host.
+        '''
+        for shared_mountpoint in self.__shared_directories:
+            self._umount (shared_mountpoint)
 
     def mount(self):
         if self.path == '/':
@@ -330,6 +354,7 @@ class ChRootFilesystem(Filesystem):
             os.system ("mount -t sysfs none %s/sys" % self.path)
             os.system ("mount -o bind /dev %s/dev" % self.path)
             os.system ("mount -o bind /dev/pts %s/dev/pts" % self.path)
+            self.__mount_shared_directories()
         except:
             self.umount ()
             raise
@@ -362,6 +387,7 @@ class ChRootFilesystem(Filesystem):
         self._umount ("%s/sys" % self.path)
         self._umount ("%s/dev/pts" % self.path)
         self._umount ("%s/dev" % self.path)
+        self.__umount_shared_directories ()
 
     def leave_chroot (self):
         assert self.inchroot
