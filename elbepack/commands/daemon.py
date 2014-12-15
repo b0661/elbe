@@ -17,6 +17,7 @@
 # along with ELBE.  If not, see <http://www.gnu.org/licenses/>.
 
 import cherrypy
+from cherrypy.process.plugins import Daemonizer, PIDFile
 
 from optparse import OptionParser
 from pkgutil import iter_modules
@@ -33,26 +34,31 @@ def run_command( argv ):
     daemons = get_daemonlist()
 
     if not daemons:
-        print 'no elbe daemons installed'
+        print 'no elbe server applications installed'
 
     oparser = OptionParser(usage="usage: %prog")
+    oparser.add_option( "--no-daemon", action="store_true",
+		        dest="no_daemon", default=False,
+                        help="Do not detach elbe server into the background so that error messages will be displayed on console." )
     oparser.add_option( "--host", dest="host", default='0.0.0.0',
-                        help="interface to host daemon" )
+                        help="Network interface to bind the elbe server to." )
     oparser.add_option( "--port", dest="port", default=8080,
-                        help="port to host daemon" )
+                        help="Port to bind elbe server to." )
+    oparser.add_option( "--pid-file", dest="pid_file", default="/var/run/elbe-daemon.pid",
+                        help="Process id file of elbe server." )
 
     for d in daemons:
         oparser.add_option( "--"+str(d), dest=str(d), default=False,
-                action="store_true", help="enable "+str(d))
+                action="store_true",		 help="Enable "+str(d)+" daemon application.")
 
-    (opt,args) = oparser.parse_args(argv)
+    (options,args) = oparser.parse_args(argv)
 
     active = False
 
     for d in daemons:
-        for o in dir(opt):
+        for o in dir(options):
             if str(o) == str(d):
-                if getattr(opt,o) == True:
+                if getattr(options,o) == True:
                     active = True
                     print "enable", str(d)
                     module = "elbepack.daemons." + str(d)
@@ -60,16 +66,16 @@ def run_command( argv ):
                     cmdmod = sys.modules[module]
                     cherrypy.tree.graft(cmdmod.get_app(), "/"+str(d))
     if not active:
-        print 'no daemon activated, use'
+        print 'No elbe server application activated, use'
         for d in daemons:
             print '   --'+d
-        print 'to activate at least one daemon'
+        print 'and activate at least one elbe server application.'
         return
 
     cherrypy.server.unsubscribe()
     server = cherrypy._cpserver.Server()
-    server.socket_host = opt.host
-    server.socket_port = int(opt.port)
+    server.socket_host = options.host
+    server.socket_port = int(options.port)
     server.thread_pool = 30
 
     # For SSL Support
@@ -78,6 +84,26 @@ def run_command( argv ):
     # server.ssl_private_key       = 'ssl/private.key'
     # server.ssl_certificate_chain = 'ssl/bundle.crt'
 
-    server.subscribe()
-    cherrypy.engine.start()
-    cherrypy.engine.block()
+    if options.no_daemon:
+	server.subscribe()	
+    else:
+        # Don't print anything to stdout/sterr.
+        cherrypy.config.update({'log.screen' : False})
+	Daemonizer(cherrypy.engine).subscribe()
+
+    if options.pid_file:
+	PIDFile(cherrypy.engine, options.pid_file).subscribe()
+
+    if hasattr(cherrypy.engine, "signal_handler"):
+	cherrypy.engine.signal_handler.subscribe()
+    if hasattr(cherrypy.engine, "console_control_handler"):
+	cherrypy.engine.console_control_handler.subscribe()
+
+    # Always start the engine; this will start all other services
+    try:
+	cherrypy.engine.start()
+    except:
+	# Assume the error has been logged already via bus.log.
+	sys.exit(1)
+    else:
+	cherrypy.engine.block()
