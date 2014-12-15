@@ -25,3 +25,4 @@ dist/
 elbe.egg-info/
 tags
 *.swp
+*.kdev4
