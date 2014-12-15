@@ -19,6 +19,7 @@
 import apt_pkg
 import os
 import sys
+import urlparse
 
 import elbepack
 
@@ -43,9 +44,11 @@ class BuildEnv ():
                 0755, "#!/bin/sh\nexit 101\n")
             self.debootstrap ()
             self.fresh_debootstrap = True
+            self.need_dumpdebootstrap = True
         else:
             print 'work on existing rfs'
             self.fresh_debootstrap = False
+            self.need_dumpdebootstrap = False
 
         self.initialize_dirs ()
 
@@ -173,9 +176,31 @@ class BuildEnv ():
 
         self.rfs.mkdir_p ("/etc/apt")
 
-        d = { "xml":  self.xml,
-              "prj":  self.xml.node("/project"),
-              "pkgs": self.xml.node("/target/pkg-list") }
+        pinned_origins = []
+        if self.xml.has('project/mirror/url-list'):
+            for url in self.xml.node('project/mirror/url-list'):
+                if not url.has('binary'):
+                    continue
+
+                repo = url.node('binary')
+                if not 'pin' in repo.et.attrib:
+                    continue
+
+                origin = urlparse.urlsplit(repo.et.text.strip()).hostname
+                pin = repo.et.attrib['pin']
+                if 'package' in repo.et.attrib:
+                    package = repo.et.attrib['package']
+                else:
+                    package = '*'
+                pinning = { 'pin':     pin,
+                            'origin':  origin,
+                            'package': package }
+                pinned_origins.append(pinning)
+
+        d = { "xml":   self.xml,
+              "prj":   self.xml.node("/project"),
+              "pkgs":  self.xml.node("/target/pkg-list"),
+              "porgs": pinned_origins }
 
         write_pack_template( filename, "preferences.mako", d )
 
@@ -192,4 +217,7 @@ class BuildEnv ():
         self.log.chroot( self.rfs.path, """/bin/sh -c 'echo "%s.%s" > /etc/mailname'""" % (hostname, domain) )
 
         serial_con, serial_baud = self.xml.text( "target/console" ).split(',')
-        self.log.chroot( self.rfs.path, """/bin/sh -c 'echo "T0:23:respawn:/sbin/getty -L %s %s vt100" >> /etc/inittab'""" % (serial_con, serial_baud) )
+        if serial_baud:
+            self.log.chroot(self.rfs.path, """/bin/sh -c 'echo "T0:23:respawn:/sbin/getty -L %s %s vt100" >> /etc/inittab'""" % (serial_con, serial_baud) )
+        else:
+            self.log.printo("parsing console tag failed, needs to be of '/dev/ttyS0,115200' format.")

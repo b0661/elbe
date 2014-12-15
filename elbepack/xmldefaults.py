@@ -15,6 +15,20 @@ armel_defaults = {
         "triplet":      "arm-linux-gnueabi"
 }
 
+armel_linaro48_defaults = {
+        "arch":         "armel",
+        "size":         "20G",
+        "mem":          "256",
+        "interpreter":  "qemu-system-arm",
+        "userinterpr":  "qemu-arm-static",
+        "console":      "ttyAMA0,115200n1",
+        "machine":      "versatilepb",
+        "nicmodel":     "smc91c111",
+        "triplet":      "arm-linux-gnueabi",
+        "toolchaintype":"linaro_armel",
+        "toolchainver": "4.8.3",
+}
+
 armel_virtio_defaults = {
         "arch":         "armel",
         "size":         "20G",
@@ -37,6 +51,20 @@ armhf_defaults = {
         "machine":      "versatilepb -cpu cortex-a9",
         "nicmodel":     "smc91c111",
         "triplet":      "arm-linux-gnueabihf"
+}
+
+armhf_linaro48_defaults = {
+        "arch":         "armhf",
+        "size":         "20G",
+        "mem":          "256",
+        "interpreter":  "qemu-system-arm",
+        "userinterpr":  "qemu-arm-static",
+        "console":      "ttyAMA0,115200n1",
+        "machine":      "versatilepb -cpu cortex-a9",
+        "nicmodel":     "smc91c111",
+        "triplet":      "arm-linux-gnueabihf",
+        "toolchaintype":"linaro",
+        "toolchainver": "4.8.3",
 }
 
 armhf_virtio_defaults = {
@@ -103,8 +131,10 @@ archindep_defaults = {
 }
 
 defaults = { "armel": armel_defaults,
+             "armel-linaro48": armel_linaro48_defaults,
              "armel-virtio": armel_virtio_defaults,
              "armhf": armhf_defaults,
+             "armhf-linaro48": armhf_linaro48_defaults,
              "armhf-virtio": armhf_virtio_defaults,
              "ppc": ppc_defaults,
              "ppcspe": ppcspe_defaults,

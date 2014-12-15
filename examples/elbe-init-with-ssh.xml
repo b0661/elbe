@@ -15,7 +15,15 @@
 		</mirror>
 		<noauth/>
 		<suite>wheezy</suite>
+		<pkg-list>
+			<pkg>openssh-server</pkg>
+		</pkg-list>
 		<portforwarding>
+			<forward>
+				<proto>tcp</proto>
+				<buildenv>22</buildenv>
+				<host>5022</host>
+			</forward>
 			<forward>
 				<proto>tcp</proto>
 				<buildenv>8080</buildenv>

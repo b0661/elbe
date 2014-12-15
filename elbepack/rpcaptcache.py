@@ -64,9 +64,13 @@ class RPCAPTCache(InChRootObject):
 
         return ret
 
-    def mark_install( self, pkgname, version ):
+    def mark_install( self, pkgname, version, from_user=True, nodeps=False ):
         p = self.cache[pkgname]
-        p.mark_install()
+        if version:
+            p.candidate = p.versions[ version ]
+        p.mark_install( auto_fix = not nodeps,
+                auto_inst = not nodeps,
+                from_user = from_user )
 
     def cleanup (self, debootstrap_pkgs):
         for p in self.cache:
@@ -80,6 +84,8 @@ class RPCAPTCache(InChRootObject):
 
     def mark_upgrade( self, pkgname, version ):
         p = self.cache[pkgname]
+        if version:
+            p.candidate = p.versions[ version ]
         p.mark_upgrade()
 
     def mark_delete( self, pkgname, version ):
@@ -113,8 +119,12 @@ class RPCAPTCache(InChRootObject):
         deps = getalldeps( self.cache, pkgname )
         return [APTPackage(p, cache=self.cache) for p in deps]
 
-    def get_installed_pkgs( self ):
-        return [APTPackage(p) for p in self.cache if p.is_installed]
+    def get_installed_pkgs( self, section='all' ):
+        if section == 'all':
+            return [APTPackage(p) for p in self.cache if p.is_installed]
+        else:
+            return [APTPackage(p) for p in self.cache if (p.section == section
+                and p.is_installed)]
 
     def get_fileindex( self ):
         index = {}
@@ -126,12 +136,20 @@ class RPCAPTCache(InChRootObject):
 
         return index
 
-    def get_marked_install( self ):
-        return [APTPackage(p) for p in self.cache if p.marked_install == True]
+    def get_marked_install( self, section='all' ):
+        if section == 'all':
+            ret = [APTPackage(p) for p in self.cache if p.marked_install]
+        else:
+            ret = [APTPackage(p) for p in self.cache if (p.section == section
+                and p.marked_install)]
+        return ret
 
-    def get_upgradeable( self):
-        ret = [ APTPackage(p) for p in self.cache
-                            if p.is_upgradable == True]
+    def get_upgradeable(self, section='all'):
+        if section == 'all':
+            ret = [ APTPackage(p) for p in self.cache if p.is_upgradable]
+        else:
+            ret = [ APTPackage(p) for p in self.cache if (p.section == section
+                and p.is_upgradable)]
         return ret
 
     def upgrade( self, dist_upgrade = False ):
@@ -161,7 +179,10 @@ class RPCAPTCache(InChRootObject):
             pkgver = p.installed
         else:
             pkgver = p.versions[version]
-        pkgver.fetch_binary(path, ElbeAcquireProgress(cb=self.co_cb))
+
+        rel_filename = pkgver.fetch_binary(path,
+                ElbeAcquireProgress(cb=self.co_cb))
+        return self.rfs.fname( rel_filename )
 
     def download_source( self, pkgname, path, version=None ):
         p = self.cache[pkgname]
@@ -170,7 +191,9 @@ class RPCAPTCache(InChRootObject):
         else:
             pkgver = p.versions[version]
 
-        pkgver.fetch_source(path, ElbeAcquireProgress(cb=self.co_cb), unpack=False)
+        rel_filename = pkgver.fetch_source(path,
+                ElbeAcquireProgress(cb=self.co_cb), unpack=False)
+        return self.rfs.fname( rel_filename )
 
 
 class MyMan(BaseManager):

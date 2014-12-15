@@ -175,6 +175,10 @@ class Filesystem(object):
         f.write(time.strftime("%c\n"))
         f.close()
 
+        version_file = self.open("etc/updated_version", "w")
+        version_file.write( xml.text ("/project/version") )
+        version_file.close
+
         elbe_base = self.open("etc/elbe_base.xml", "wb")
         xml.xml.write(elbe_base)
 
@@ -405,7 +409,7 @@ class TargetFs(ChRootFilesystem):
         ChRootFilesystem.__init__(self, path, xml.defs["userinterpr"], clean)
         self.log = log
         self.xml = xml
-        self.images = None
+        self.images = []
 
     def write_fstab(self, xml):
         if not self.exists("etc"):

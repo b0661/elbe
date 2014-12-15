@@ -19,12 +19,17 @@
 # along with ELBE.  If not, see <http://www.gnu.org/licenses/>.
 
 
+import errno
+
 from os import path
 from threading import Lock
 from uuid import uuid4
-from elbepack.db import ElbeDB, ElbeDBError
+from shutil import rmtree
+
+from elbepack.db import ElbeDB, ElbeDBError, get_versioned_filename
 from elbepack.asyncworker import AsyncWorker, BuildJob, APTUpdateJob
 from elbepack.asyncworker import APTCommitJob, GenUpdateJob, GenUpdateJob
+from elbepack.asyncworker import SaveVersionJob, CheckoutVersionJob
 
 class ProjectManagerError(Exception):
     def __init__ (self, message):
@@ -159,7 +164,19 @@ class ProjectManager(object):
             pfd = self.db.get_project_file( builddir, filename )
             return OpenProjectFile( pfd, mode )
 
-    def set_current_project_xml (self, userid, xmlfile):
+    def set_current_project_private_data (self, userid, private_data):
+        with self.lock:
+            ep = self._get_current_project( userid )
+            ep.private_data = private_data
+
+    def get_current_project_private_data (self, userid):
+        private_data = None
+        with self.lock:
+            ep = self._get_current_project( userid )
+            private_data = ep.private_data
+        return private_data
+
+    def set_current_project_xml (self, userid, xml_file):
         with self.lock:
             ep = self._get_current_project( userid )
             if self.db.is_busy( ep.builddir ):
@@ -168,7 +185,26 @@ class ProjectManager(object):
                         ep.builddir )
 
             self.db.set_xml( ep.builddir, xml_file )
-            ep.set_xml()    # Always use source.xml in the project directory
+
+    def set_current_project_presh (self, userid, presh_file):
+        with self.lock:
+            ep = self._get_current_project( userid )
+            if self.db.is_busy( ep.builddir ):
+                raise InvalidState(
+                        "cannot change pre.sh file for busy project in %s" %
+                        ep.builddir )
+
+            self.db.set_presh( ep.builddir, presh_file )
+
+    def set_current_project_postsh (self, userid, postsh_file):
+        with self.lock:
+            ep = self._get_current_project( userid )
+            if self.db.is_busy( ep.builddir ):
+                raise InvalidState(
+                        "cannot change post.sh file for busy project in %s" %
+                        ep.builddir )
+
+            self.db.set_postsh( ep.builddir, postsh_file )
 
     def set_current_project_version( self, userid, new_version ):
         with self.lock:
@@ -189,7 +225,20 @@ class ProjectManager(object):
     def save_current_project_version( self, userid, description = None ):
         with self.lock:
             ep = self._get_current_project( userid )
-            self.db.save_version( ep.builddir, description )
+            if self.db.is_busy( ep. builddir ):
+                raise InvalidState(
+                        "project %s is busy" % ep.builddir )
+
+            self.worker.enqueue( SaveVersionJob( ep, description ) )
+
+    def checkout_project_version( self, userid, version ):
+        with self.lock:
+            ep = self._get_current_project( userid )
+            if self.db.is_busy( ep.builddir ):
+                raise InvalidState(
+                        "project %s is busy" % ep.builddir )
+
+            self.worker.enqueue( CheckoutVersionJob( ep, version ) )
 
     def set_current_project_version_description( self, userid, version,
             description ):
@@ -205,7 +254,17 @@ class ProjectManager(object):
                         "cannot delete version of busy project in %s" %
                         ep.builddir )
 
+            name = ep.xml.text( "project/name" )
             self.db.del_version( ep.builddir, version )
+
+            # Delete corresponding package archive, if existing
+            pkgarchive = get_versioned_filename( name, version, ".pkgarchive" )
+            pkgarchive_path = path.join( ep.builddir, pkgarchive )
+            try:
+                rmtree( pkgarchive_path )
+            except OSError as e:
+                if e.errno != errno.ENOENT:
+                    raise
 
     def build_current_project (self, userid):
         with self.lock:
@@ -255,6 +314,12 @@ class ProjectManager(object):
         with self.lock:
             c = self._get_current_project_apt_cache( userid )
             c.mark_install( pkgname, version )
+            ep = self._get_current_project( userid )
+            pkgs = ep.xml.get_target_packages()
+            if not pkgname in pkgs:
+                pkgs.append(pkgname)
+            ep.xml.set_target_packages(pkgs)
+
 
     def apt_mark_upgrade (self, userid, pkgname, version):
         with self.lock:
@@ -264,12 +329,47 @@ class ProjectManager(object):
     def apt_mark_delete (self, userid, pkgname, version):
         with self.lock:
             c = self._get_current_project_apt_cache( userid )
-            c.mark_delete( pkgname, version )
+
+            ep = self._get_current_project( userid )
+            pkgs = ep.xml.get_target_packages()
+            if pkgname in pkgs:
+                pkgs.remove(pkgname)
+            ep.xml.set_target_packages(pkgs)
+
+            debootstrap_pkgs = []
+            for p in ep.xml.xml.node("debootstrappkgs"):
+                debootstrap_pkgs.append (p.et.text)
+            c.cleanup(debootstrap_pkgs)
+
+            for p in pkgs:
+                c.mark_install( p, None )
+
+    def get_debootstrap_pkgs(self, userid):
+        with self.lock:
+            ep = self._get_current_project( userid )
+
+            debootstrap_pkgs = []
+            for p in ep.xml.xml.node("debootstrappkgs"):
+                debootstrap_pkgs.append (p.et.text)
+
+            return debootstrap_pkgs
 
     def apt_mark_keep (self, userid, pkgname, version):
         with self.lock:
             c = self._get_current_project_apt_cache( userid )
             c.mark_keep( pkgname, version )
+
+            ep = self._get_current_project( userid )
+            pkgs = ep.xml.get_target_packages()
+            if not pkgname in pkgs:
+                pkgs.append(pkgname)
+            ep.xml.set_target_packages(pkgs)
+
+    def apt_get_target_packages (self, userid):
+        with self.lock:
+            ep = self._get_current_project( userid )
+            return ep.xml.get_target_packages()
+
 
     def apt_upgrade (self, userid, dist_upgrade = False):
         with self.lock:
@@ -281,15 +381,30 @@ class ProjectManager(object):
             c = self._get_current_project_apt_cache( userid )
             return c.get_changes()
 
-    def apt_get_marked_install (self, userid):
+    def apt_get_marked_install (self, userid, section='all'):
         with self.lock:
             c = self._get_current_project_apt_cache( userid )
-            return c.get_marked_install( userid )
+            return c.get_marked_install (section=section)
 
-    def apt_get_pkglist (self, userid, section):
+    def apt_get_installed (self, userid, section='all'):
+        with self.lock:
+            c = self._get_current_project_apt_cache( userid )
+            return c.get_installed_pkgs (section=section)
+
+    def apt_get_upgradeable (self, userid, section='all'):
+        with self.lock:
+            c = self._get_current_project_apt_cache( userid )
+            return c.get_upgradeable (section=section)
+
+    def apt_get_pkglist (self, userid, section='all'):
         with self.lock:
             c = self._get_current_project_apt_cache( userid )
             return c.get_pkglist( section )
+
+    def apt_get_pkg (self, userid, term):
+        with self.lock:
+            c = self._get_current_project_apt_cache( userid )
+            return c.get_pkg( term )
 
     def apt_get_sections (self, userid):
         with self.lock:

@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-#
 # ELBE - Debian Based Embedded Rootfilesystem Builder
-# Copyright (C) 2013  Linutronix GmbH
+# Copyright (C) 2014  Linutronix GmbH
 #
 # This file is part of ELBE.
 #
@@ -18,4 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with ELBE.  If not, see <http://www.gnu.org/licenses/>.
 
-elbe_version = "0.9.0~beta3"
+from esoap import ESoap
+
+def get_app():
+    return ESoap ()

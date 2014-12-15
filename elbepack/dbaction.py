@@ -93,7 +93,7 @@ class AddUserAction(DbAction):
         if not opt.password:
             password = getpass('Password for the new user: ')
         else:
-            password = oparser.password
+            password = opt.password
 
         db = ElbeDB()
         db.add_user( arg[0], opt.fullname, password, opt.email, opt.admin )
@@ -251,7 +251,8 @@ class BuildAction(DbAction):
             return
 
         db = ElbeDB()
-        db.set_busy( args[0], True )
+        db.set_busy( args[0], [ "empty_project", "needs_build", "has_changes",
+                                "build_done", "build_failed" ] )
         try:
             ep = db.load_project( args[0] )
             ep.build( skip_debootstrap = True )

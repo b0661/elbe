@@ -42,6 +42,8 @@ from elbepack.gpg import unsign_file
 from elbepack.treeutils import etree
 from elbepack.xmldefaults import ElbeDefaults
 
+from multiprocessing import Process, Queue
+
 class UpdateStatus:
     monitor = None
     observer = None
@@ -49,6 +51,8 @@ class UpdateStatus:
     stop = False
     step = 0
     nosign = False
+    verbose = False
+    repo_dir = ""
 
 status = UpdateStatus ()
 
@@ -72,19 +76,13 @@ class UpdateService (SimpleWSGISoapApp):
 
     @soapmethod (String, _returns=String)
     def apply_snapshot (self, version):
-
         if version == "base_version":
             fname = "/etc/elbe_base.xml"
         else:
-            fname = "/var/cache/elbe/" + version + "/new.xml"
+            fname = status.repo_dir + "/" + version + "/new.xml"
 
         try:
-            xml = etree (fname)
-        except:
-            return "snapshot %s not found" % version
-
-        try:
-            apply_update (xml)
+            apply_update (fname)
         except Exception, err:
             print Exception, err
             status.step = 0
@@ -97,6 +95,65 @@ class UpdateService (SimpleWSGISoapApp):
     def register_monitor (self, wsdl_url):
         status.monitor = Client (wsdl_url)
         log ("connection established")
+
+class rw_access_file:
+    def __init__ (self, filename):
+        self.filename = filename
+        self.rw = rw_access (filename)
+
+    def __enter__ (self):
+        self.rw.__enter__ ()
+        self.f = open (self.filename, 'w')
+        return self.f
+
+    def __exit__ (self, type, value, traceback):
+        if os.path.isfile (self.filename):
+            self.f.close ()
+        self.rw.__exit__ (type, value, traceback)
+
+class rw_access:
+    def __init__ (self, directory):
+        self.directory = directory
+        self.mount = self.get_mount ()
+        self.mount_orig = self.get_mount_status ()
+
+    def __enter__ (self):
+        if self.mount_orig == 'ro':
+            log ("remount %s read/writeable" % self.mount)
+            cmd = "mount -o remount,rw %s" % self.mount
+            os.system (cmd)
+
+    def __exit__ (self, type, value, traceback):
+        if self.mount_orig == 'ro':
+            log ("remount %s readonly" % self.mount)
+            os.system ("sync")
+            cmd = "mount -o remount,ro %s" % self.mount
+            ret = os.system (cmd)
+
+    def get_mount_status (self):
+        with open ('/etc/mtab') as mtab:
+            mtab_lines = mtab.readlines ()
+            # take care, to use the last mount if overlayed mountpoints are
+            # used: e.g. rootfs / rootfs rw 0 0 vs. /dev/root / ext2 ro
+            ret = 'unknown'
+            for ml in mtab_lines:
+                mle = ml.split (' ')
+                if mle[1] == self.mount:
+                    attr_list = mle[3].split(',')
+                    for attr in attr_list:
+                        if attr == 'ro':
+                            ret = 'ro'
+                        elif attr == 'rw':
+                            ret = 'rw'
+        return ret
+
+    def get_mount (self):
+        path = os.path.realpath (os.path.abspath (self.directory))
+        while path != os.path.sep:
+            if os.path.ismount (path):
+                return path
+            path = os.path.abspath (os.path.join (path, os.pardir))
+        return path
 
 def fname_replace (s):
     allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -118,7 +175,7 @@ def update_sourceslist (xml, update_dir):
     fname += fname_replace (xml.text ("/project/version"))
     fname += ".list"
 
-    with open (fname, 'w') as f:
+    with rw_access_file (fname) as f:
         f.write (deb)
 
 def mark_install (depcache, pkg, version, auto):
@@ -130,7 +187,12 @@ def mark_install (depcache, pkg, version, auto):
 
     log ("ERROR: " + pkg.name + version + " is not available in the cache")
 
-def apply_update (xml):
+def _apply_update (fname):
+
+    try:
+        xml = etree (fname)
+    except:
+        return "read %s failed" % fname
 
     fpl = xml.node ("fullpkgs")
 
@@ -173,8 +235,8 @@ def apply_update (xml):
         for fpi in fpl:
             if pkg.name == fpi.et.text:
                 mark_install (depcache, pkg,
-                              fpi.et.get('version'),
-                              fpi.et.get('auto'))
+                            fpi.et.get('version'),
+                            fpi.et.get('auto'))
                 marked = True
 
         if not marked:
@@ -183,6 +245,25 @@ def apply_update (xml):
     status.step = 3
     log ("applying snapshot")
     depcache.commit (ElbeAcquireProgress (cb=log), ElbeInstallProgress (cb=log))
+    del depcache
+    del hl_cache
+    del cache
+    del sources
+
+    version_file = open("/etc/updated_version", "w")
+    version_file.write( xml.text ("/project/version") )
+    version_file.close()
+
+def apply_update (fname):
+    # As soon as python-apt closes its opened files on object deletion
+    # we can drop this fork workaround. As long as they keep their files
+    # open, we run the code in an own fork, than the files are closed on
+    # process termination an we can remount the filesystem readonly
+    # without errors.
+    p = Process (target=_apply_update, args=(fname, ))
+    with rw_access ("/"):
+        p.start ()
+        p.join ()
 
 def log (msg):
 
@@ -202,6 +283,8 @@ def log (msg):
         syslog (msg)
     except:
         print msg
+    if status.verbose:
+        print msg
 
 def update (upd_file):
 
@@ -219,29 +302,38 @@ def update (upd_file):
         log ("update invalid (new.xml missing)")
         return
 
-    upd_file_z.extract ("new.xml", "/tmp/")
+    with rw_access ("/tmp"):
+        upd_file_z.extract ("new.xml", "/tmp/")
 
     xml = etree ("/tmp/new.xml")
-    prefix = "/var/cache/elbe/" + fname_replace (xml.text ("/project/name"))
+    prefix = status.repo_dir + "/" + fname_replace (xml.text ("/project/name"))
     prefix += "_" + fname_replace (xml.text ("/project/version")) + "/"
 
     log ("preparing update: " + prefix)
 
-    for i in upd_file_z.namelist ():
+    with rw_access (prefix):
+        for i in upd_file_z.namelist ():
 
-        (dirname, filename) = os.path.split (i)
+            (dirname, filename) = os.path.split (i)
 
-        try:
-            upd_file_z.extract (i, prefix)
-        except OSError:
-            log ("extraction failed: %s" % sys.exc_info () [1])
-            return
+            try:
+                upd_file_z.extract (i, prefix)
+            except OSError:
+                log ("extraction failed: %s" % sys.exc_info () [1])
+                return
 
-    update_sourceslist (xml, prefix + "repo")
     try:
-        apply_update (xml)
+        update_sourceslist (xml, prefix + "repo")
     except Exception, err:
-        print Exception, err
+        log (str (err))
+        status.step = 0
+        log ("update apt sources list failed: " + prefix)
+        return
+
+    try:
+        apply_update ("/tmp/new.xml")
+    except Exception, err:
+        log (str (err))
         status.step = 0
         log ("apply update failed: " + prefix)
         return
@@ -277,8 +369,8 @@ class FileMonitor (pyinotify.ProcessEvent):
 
         elif status.nosign:
             action_select (event.pathname)
-
-        log ("ignore file: " + str(event.pathname))
+        else:
+            log ("ignore file: " + str(event.pathname))
 
 def shutdown (signum, fname):
 
@@ -296,7 +388,7 @@ class ObserverThread (threading.Thread):
 
         global status
 
-        log ("monitoringing updated dir")
+        log ("monitoring updated dir")
 
         while 1:
             if status.observer.check_events (timeout=1000):
@@ -318,6 +410,10 @@ def run_command (argv):
                         help="monitor dir (default is /var/cache/elbe/updates)",
                         metavar="FILE" )
 
+    oparser.add_option ("--repocache", dest="repo_dir",
+                        help="monitor dir (default is /var/cache/elbe/repos)",
+                        metavar="FILE" )
+
     oparser.add_option ("--host", dest="host", default="",
                         help="listen host")
 
@@ -328,14 +424,24 @@ def run_command (argv):
                         default=False,
                         help="accept none signed files")
 
+    oparser.add_option ("--verbose", action="store_true", dest="verbose",
+                        default=False,
+                        help="force output to stdout instead of syslog")
+
     (opt,args) = oparser.parse_args(argv)
 
     status.nosign = opt.nosign
+    status.verbose = opt.verbose
 
     if not opt.update_dir:
         update_dir = "/var/cache/elbe/updates"
     else:
         update_dir = opt.update_dir
+
+    if not opt.repo_dir:
+        status.repo_dir = "/var/cache/elbe/repos"
+    else:
+        status.repo_dir = opt.repo_dir
 
     if not os.path.isdir (update_dir):
         os.makedirs (update_dir)

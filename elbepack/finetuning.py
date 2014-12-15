@@ -153,7 +153,8 @@ class LnAction(FinetuningAction):
         FinetuningAction.__init__(self, node)
 
     def execute(self, log, buildenv, target):
-        log.do( "ln -s " + self.node.et.attrib['path'] + " " + target.fname( self.node.et.text ) )
+        log.chroot (target.path, "ln -s %s %s" % (self.node.et.attrib['path'],
+                                                  self.node.et.text))
 
 FinetuningAction.register( LnAction )
 
@@ -189,8 +190,10 @@ class AddUserAction(FinetuningAction):
           log.chroot (target.path, "/usr/sbin/useradd -U -m -s %s %s" % (
                 self.node.et.attrib['shell'], self.node.et.text))
 
-        log.chroot (target.path, "/bin/echo %s:%s | /usr/sbin/chpasswd" % (
-                self.node.et.text, self.node.et.attrib['passwd']))
+        log.chroot (target.path, "/bin/sh -c 'echo %s\n%s\n | passwd %s" % (
+                           self.node.et.attrib['passwd'],
+                           self.node.et.attrib['passwd'],
+                           self.node.et.text))
 
 FinetuningAction.register( AddUserAction )
 
@@ -209,6 +212,18 @@ class AddGroupAction(FinetuningAction):
 
 FinetuningAction.register( AddGroupAction )
 
+class RawCmdAction(FinetuningAction):
+
+    tag = 'raw_cmd'
+
+    def __init__(self, node):
+        FinetuningAction.__init__(self, node)
+
+    def execute(self, log, buildenv, target):
+        with target:
+            log.chroot (target.path, self.node.et.text)
+
+FinetuningAction.register( RawCmdAction )
 
 class CmdAction(FinetuningAction):
 
@@ -219,7 +234,7 @@ class CmdAction(FinetuningAction):
 
     def execute(self, log, buildenv, target):
         with target:
-            log.chroot (target.path, "/bin/sh -c '%s'" % self.node.et.text)
+            log.chroot (target.path, "/bin/sh", input=self.node.et.text)
 
 FinetuningAction.register( CmdAction )
 
@@ -232,7 +247,7 @@ class BuildenvCmdAction(FinetuningAction):
 
     def execute(self, log, buildenv, target):
         with buildenv:
-            log.chroot (buildenv.path, "/bin/sh -c '%s'" % self.node.et.text)
+            log.chroot (buildenv.path, "/bin/sh", input=self.node.et.text)
 
 FinetuningAction.register( BuildenvCmdAction )
 
