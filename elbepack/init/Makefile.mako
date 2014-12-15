@@ -36,6 +36,7 @@ import string
 
 nicmac = prj.text('buildimage/NIC/MAC', default=defs, key='nicmac')
 target_num = 1
+share_num = 0
 %>
 
 # Do not use graphic output but use console.
@@ -68,14 +69,26 @@ CLI_NETWORK=-net nic,vlan=1,model=$(NICMODEL),macaddr='${nicmac}' -net user,vlan
 CLI_SHARED_DIR=-fsdev local,security_model=mapped,id=fsdev0,path=$(REPO_DIR) \
  -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=elbe-repo \
 % if prj.has("share-list"):
-<%   share_nr = 0 %>\
 %    for share in prj.node("share-list"):
 <%
-         share_nr += 1 
+         share_num += 1 
          share_host_path = os.path.abspath(share.text("host-path")) 
 %>\
- -fsdev local,security_model=mapped,id=fsdev${share_nr},path=${share_host_path} \
- -device virtio-9p-pci,id=fs${share_nr},fsdev=fsdev${share_nr},mount_tag=${share.text("id")} \
+ -fsdev local,security_model=mapped,id=fsdev${share_num},path=${share_host_path} \
+ -device virtio-9p-pci,id=fs${share_num},fsdev=fsdev${share_num},mount_tag=${share.text("id")} \
+%    endfor
+% endif
+
+# 2nd stage boot shared directories for clone directories
+CLI_CLONED_DIR= \
+% if prj.has("clone-list"):
+%    for clone in prj.node("clone-list"):
+<%
+         share_num += 1 
+         share_host_path = os.path.abspath(clone.text("host-path")) 
+%>\
+ -fsdev local,security_model=mapped,id=fsdev${share_num},path=${share_host_path} \
+ -device virtio-9p-pci,id=fs${share_num},fsdev=fsdev${share_num},mount_tag=${clone.text("id")} \
 %    endfor
 % endif
 
@@ -112,7 +125,7 @@ all: .stamps/stamp-install-initial-image .elbe-gen/files-to-extract
 #   See Makefile.mako for the whole 2 stage installation process.
 .stamps/stamp-install-initial-core-image: .stamps/stamp-create-buildenv-img
 	$(INTERPRETER) $(CLI_BASE_INSTALL_INITIAL_CORE_IMAGE) $(CLI_NOGRAPHIC) $(CLI_MACHINE) $(CLI_DEFAULTS) \
-        $(CLI_SHARED_DIR) $(CLI_HDD) $(CLI_NETWORK) && reset
+        $(CLI_HDD) $(CLI_NETWORK) && reset
 	mkdir -p .stamps
 	touch .stamps/stamp-install-initial-core-image
 
@@ -121,7 +134,7 @@ all: .stamps/stamp-install-initial-image .elbe-gen/files-to-extract
 .stamps/stamp-install-initial-image: .stamps/stamp-install-initial-core-image
 	mkdir -p .elbe-share
 	$(INTERPRETER) $(CLI_BASE) $(CLI_NOGRAPHIC) $(CLI_MACHINE) $(CLI_DEFAULTS) \
-        $(CLI_SHARED_DIR) $(CLI_HDD) $(CLI_NETWORK) && reset
+        $(CLI_SHARED_DIR) $(CLI_CLONED_DIR) $(CLI_HDD) $(CLI_NETWORK) && reset
 
 run:
 	$(INTERPRETER) $(CLI_BASE) $(CLI_MACHINE) $(CLI_DEFAULTS) \
@@ -150,6 +163,7 @@ run-serial:
 # Make an image for virtualbox
 buildenv.vdi: .stamps/stamp-install-initial-core-image buildenv.img 
 	qemu-img convert -O vdi buildenv.img buildenv.vdi
+
 
 # Make an image for VMWare
 buildenv.vmdk: .stamps/stamp-install-initial-core-image buildenv.img 
