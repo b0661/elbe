@@ -17,10 +17,17 @@
 # along with ELBE.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import urllib
+from urlparse import urlparse,urlunparse
+import mimetypes
 from elbepack.debianreleases import codename2suite
 from elbepack.filesystem import Filesystem
 from elbepack.pkgutils import get_dsc_size
 
+# Amend mimetypes to also include debian packages
+mimetypes.add_type("application/vnd.debian.binary-package", ".deb", False)
+mimetypes.add_type("application/vnd.debian.source-package", ".dsc", False)
+mimetypes.add_type("application/vnd.debian.changes-package", ".changes", False)
 
 
 class RepoBase(object):
@@ -73,7 +80,7 @@ class RepoBase(object):
             if new_size > self.maxsize:
                 self.new_repo_volume()
 
-        self.log.do( "reprepro --basedir " + self.fs.path + " -C " + component + " includedeb " + self.codename + " " + path )
+        self.log.do( 'reprepro --basedir "' + self.fs.path + '" -C ' + component + ' includedeb ' + self.codename + ' ' + path )
 
     def includedsc( self, path, component="main"):
         if self.maxsize:
@@ -84,11 +91,37 @@ class RepoBase(object):
         if self.maxsize and (self.fs.disk_usage("") > self.maxsize):
             self.new_repo_volume()
 
-        self.log.do( "reprepro --basedir " + self.fs.path + " -C " + component + " -P normal -S misc includedsc " + self.codename + " " + path ) 
+        self.log.do( 'reprepro --basedir "' + self.fs.path  + '" -C ' + component + ' -P normal -S misc includedsc ' + self.codename + ' ' + path ) 
+        
+    def includechanges( self, path, component="main"):
+        self.log.do( "reprepro --basedir " + self.fs.path + " -C " + component + " --ignore=wrongdistribution include " + self.codename + " " + path )
+
+    def include_packages( self, packages):
+	for dpkg in packages:
+	    mimetype = mimetypes.guess_type(dpkg[0], False)[0]
+	    dpkg_url = urlparse(dpkg[0])
+	    dpkg_component = dpkg[1]
+            if dpkg_url.scheme == "" or dpkg_url.scheme == "file":
+                # sanitize file url (abs path).
+                # Remove file scheme as this might confuse.
+                dpkg_url = urlparse(os.path.normpath(dpkg_url.path))
+            dpkg_source = urlunparse(dpkg_url)
+	    if mimetype in ["application/x-debian-package", "application/vnd.debian.binary-package"]:
+		dpkg_filespec = urllib.urlretrieve(dpkg_source)
+                self.includedeb(dpkg_filespec[0], dpkg_component)
+	    elif mimetype in ["text/prs.lines.tag", "application/vnd.debian.source-package" ]:
+		dpkg_filespec = urllib.urlretrieve(dpkg_source)
+                self.includedsc(dpkg_filespec[0], dpkg_component)
+	    elif mimetype in ["application/vnd.debian.changes-package" ]:
+		dpkg_filespec = urllib.urlretrieve(dpkg_source)
+                self.includechanges(dpkg_filespec[0], dpkg_component)
+	    else:
+	        self.log.printo("+%s (%s)+ is not a debian package - skipped!" % (dpkg[0], mimetype))
 
     def buildiso( self, fname ):
         if self.volume_count == 0:
-            self.log.do( "genisoimage -o %s -J -R %s" % (fname, self.fs.path) )
+            new_path = '"' + self.fs.path + '"'
+            self.log.do( "genisoimage -o %s -J -R %s" % (fname, new_path) )
         else:
             for i in range(self.volume_count+1):
                 volfs = self.get_volume_fs(i)
@@ -119,3 +152,14 @@ class CdromSrcRepo(RepoBase):
     def __init__( self, codename, path, log, maxsize ):
         RepoBase.__init__( self, path, log, "source", codename, "Elbe", "Elbe Source Cdrom Repo", "main", maxsize )
 
+class ProjectRepo(RepoBase):
+    def __init__( self, xml, path, log ):
+        self.xml  = xml
+
+        codename = xml.text("project/suite")
+
+        RepoBase.__init__( self, path, log, "amd64 source", codename, "Elbe", "Elbe Project Repo", "main")
+
+class ToolchainRepo(RepoBase):
+    def __init__( self, arch, codename, path, log):
+        RepoBase.__init__( self, path, log, arch, codename, "toolchain", "Toolchain binary packages Repo", "main" )
