@@ -36,6 +36,8 @@ class ebase(object):
         self.et = et
 
     def text( self, path, **args ):
+        if path == ".":
+	    return self.et.text
         el = self.et.find("./"+path)
         if (el is None) and not args.has_key("default"):
             raise Exception( "Cant find path %s" % path )
