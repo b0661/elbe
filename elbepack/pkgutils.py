@@ -19,8 +19,10 @@
 
 
 import os
+import sys
 
 from tempfile import mkdtemp
+from urlparse import urlsplit
 import urllib2
 
 try:
@@ -39,13 +41,54 @@ except ImportError:
 class NoKinitrdException(Exception):
     pass
 
-def get_sources_list( prj, defs ):
-
+def apt_mirror_spec( prj, defs, uri, localmachine):
+    url = urlsplit(uri.strip())
+    mirror_spec = ""
+    if url.scheme == "" or url.scheme == "file":
+        # sanitize file url (abs path).
+        # make shure file scheme is available
+        mirror_spec += "file://%s" % (os.path.normpath(url.path))
+    elif prj.has("mirror/apt-cacher") and url.scheme == "http":
+        # Only http requests can be rerouted via apt-cacher
+        mirror_spec += "http://%s/" % prj.text("mirror/apt-cacher").strip()
+	mirror_spec += url.hostname
+	mirror_spec += url.path
+    else:
+        mirror_spec += url.geturl()
+    return mirror_spec.replace("LOCALMACHINE", localmachine)
+    
+def apt_sources_list( prj, defs, for_host = None):
+    ''' Create apt sources.list either for host environment or for VM.
+    '''
     suite = prj.text("suite")
 
     slist = ""
+    mirror = ""
+    localmachine = ""
+    if not for_host is None:
+        # Create for host environment
+        localmachine = "localhost"
+    else:
+        # Create for virtual machine (initvm) environment.
+        # From the VM the host can be reached by 10.0.2.2 on default.
+        localmachine = "10.0.2.2"
+
+    if prj.node("repository/pkg-list"):
+        if not for_host is None:
+	    mirror = "file://%s/.elbe-repo" % prj.text("directory")
+	else:
+	    mirror = "file:///media/elbe-repo"
+	slist += "# Local project repository. Shared between host and VM.\n"
+        slist += "deb %s %s main\n" % (mirror, suite)
+        slist += "deb-src %s %s main\n" % (mirror, suite)
+      
     if prj.has("mirror/primary_host"):
-        mirror = "%s://%s/%s" % ( prj.text("mirror/primary_proto"), prj.text("mirror/primary_host"), prj.text("mirror/primary_path") )
+        mirror = apt_mirror_spec(prj, defs, 
+				 "%s://%s%s" % ( prj.text("mirror/primary_proto"),
+		                                 prj.text("mirror/primary_host"),
+		                                 prj.text("mirror/primary_path") ),
+				 localmachine)
+	slist += "# Primary host.\n"
         slist += "deb %s %s main\n" % (mirror, suite)
         slist += "deb-src %s %s main\n" % (mirror, suite)
 
@@ -53,16 +96,90 @@ def get_sources_list( prj, defs ):
         tmpdir = mkdtemp()
         kinitrd = prj.text("buildimage/kinitrd", default=defs, key="kinitrd")
         os.system( '7z x -o%s "%s" pool/main/%s/%s dists' % (tmpdir, prj.text("mirror/cdrom"), kinitrd[0], kinitrd) )
+        slist += "# CDROM (.iso) repository.\n"
         slist += "deb file://%s %s main\n" % (tmpdir,suite)
 
     if prj.node("mirror/url-list"):
+        slist += "# Additional repositories.\n"
         for n in prj.node("mirror/url-list"):
             if n.has("binary"):
-                tmp = n.text("binary").replace("LOCALMACHINE", "localhost")
-                slist += "deb %s\n" % tmp.strip()
+	        # split in url and components
+	        deb_spec = n.text("binary").split(None, 1)
+	        mirror = apt_mirror_spec(prj, defs, deb_spec[0], localmachine)
+                slist += "deb %s %s\n" % (mirror, deb_spec[1])
             if n.has("source"):
-                tmp = n.text("source").replace("LOCALMACHINE", "localhost")
-                slist += "deb-src %s\n" % tmp.strip()
+	        # split in url and components
+	        deb_spec = n.text("source").split(None, 1)
+	        mirror = apt_mirror_spec(prj, defs, deb_spec[0], localmachine)
+                slist += "deb-src %s %s\n" % (mirror, deb_spec[1])
+
+    return slist
+    
+def get_sources_list( prj, defs ):
+    # Compatibility function
+    # use apt_sources_list instead
+
+    if sys.argv[1] == "init":
+	return apt_sources_list( prj, defs, True)
+      
+    return apt_sources_list( prj, defs)
+
+
+def debian_installer_mirror_preseed( prj, defs):
+    # Create debian installer preseed.cfg data for apt package mirrors.
+    suite = prj.text("suite")
+
+    preseed_cfg = ""
+    mirror = ""
+    # From the VM the host can be reached by 10.0.2.2 on default.
+    localmachine = "10.0.2.2"
+
+    # Package repository in shared directory can not be accessed by debian installer.
+    # Just ignore for now.
+      
+    if prj.has("mirror/primary_host"):
+        preseed_cfg += "d-i apt-setup/use_mirror      boolean true\n"
+        preseed_cfg += "d-i mirror/country            string manual\n"
+        if prj.has("mirror/apt-cacher") and prj.text("mirror/primary_proto") == "http":
+	    preseed_cfg += "d-i mirror/http/hostname string %s\n" % prj.text("mirror/apt-cacher").replace("LOCALMACHINE", "10.0.2.2")
+	    preseed_cfg += "d-i mirror/http/directory string /%s%s\n" % (prj.text("mirror/primary_host").replace("LOCALMACHINE", "10.0.2.2"),
+								         prj.text("mirror/primary_path"))
+	    preseed_cfg += "d-i mirror/http/directory string /%s%s\n" % (prj.text("mirror/primary_host").replace("LOCALMACHINE", "10.0.2.2"),
+								         prj.text("mirror/primary_path"))
+	else:
+	    preseed_cfg += "d-i mirror/http/hostname string %s\n" % prj.text("mirror/primary_host").replace("LOCALMACHINE", "10.0.2.2")
+	    preseed_cfg += "d-i mirror/http/directory string %s\n" % prj.text("mirror/primary_path")
+	    preseed_cfg += "d-i mirror/http/directory string %s\n" % prj.text("mirror/primary_path")
+        preseed_cfg += "d-i mirror/http/proxy string %s\n" % prj.text("mirror/primary_proxy")
+        preseed_cfg += "d-i mirror/protocol string %s\n" % prj.text("mirror/primary_proto")
+	    
+    if prj.has("mirror/cdrom"):
+        preseed_cfg += "base-config apt-setup/uri_type select cdrom\n"
+        preseed_cfg += "base-config apt-setup/cd/another boolean false\n"
+        preseed_cfg += "base-config apt-setup/another boolean false\n"
+        if not prj.has("mirror/primary_host"):
+	    preseed_cfg += "apt-mirror-setup apt-setup/use_mirror boolean false\n"
+
+    if prj.node("mirror/url-list"):
+        i = 0
+        for n in prj.node("mirror/url-list"):
+	    index = i
+	    preseed_cfg += "d-i apt-setup/local%s/repository string %s\n" % (index,
+				apt_mirror_spec(prj, defs, n.text("binary"), localmachine))
+	    preseed_cfg += "d-i apt-setup/local%s/comment string local server\n" % index
+	    preseed_cfg += "d-i apt-setup/local%s/source boolean true\n" % index
+	    #d-i apt-setup/local${i}/key string http://local.server/key
+	    i += 1
+
+    return preseed_cfg    
+
+def get_project_repo_pkg_list( prj):
+
+    slist = []
+    if not prj.node("repository/pkg-list") is None:
+        for n in prj.node("repository/pkg-list"):
+            if n.tag == "pkg-source":
+                slist += [n.text(".").split()]
 
     return slist
 
