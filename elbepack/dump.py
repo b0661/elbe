@@ -152,7 +152,8 @@ def elbe_report( xml, rfs, cache, reportname, targetfs ):
 
     outf.h2( "archive extract before finetuning" )
 
-    if xml.has("archive"):
+    if xml.text("archive"):
+        # There is really an archive - dump it to target
         with xml.archive_tmpfile() as fp:
             outf.do( 'tar xvfj "%s" -C "%s"' % (fp.name, targetfs.path) )
 
