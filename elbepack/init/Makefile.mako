@@ -149,11 +149,11 @@ run-serial:
 
 # Make an image for virtualbox
 buildenv.vdi: .stamps/stamp-install-initial-core-image buildenv.img 
-        qemu-img convert -O vdi buildenv.img buildenv.vdi
+	qemu-img convert -O vdi buildenv.img buildenv.vdi
 
 # Make an image for VMWare
 buildenv.vmdk: .stamps/stamp-install-initial-core-image buildenv.img 
-        qemu-img convert -O vmdk buildenv.img buildenv.vmdk
+	qemu-img convert -O vmdk buildenv.img buildenv.vmdk
 
 clean:
 	rm -fr .stamps/stamp* buildenv.* .elbe-vm .elbe-gen
