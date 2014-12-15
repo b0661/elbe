@@ -24,6 +24,7 @@ import os
 import pyinotify
 import signal
 import soaplib
+import subprocess
 import sys
 import time
 import threading
@@ -53,6 +54,7 @@ class UpdateStatus:
     nosign = False
     verbose = False
     repo_dir = ""
+    prefix = ""
 
 status = UpdateStatus ()
 
@@ -250,9 +252,23 @@ def _apply_update (fname):
     del cache
     del sources
 
+    log ("cleanup /var/cache/apt/archives")
+    execute ("apt-get clean")
+
     version_file = open("/etc/updated_version", "w")
     version_file.write( xml.text ("/project/version") )
     version_file.close()
+
+def execute (cmd):
+    log (subprocess.check_output (cmd, stderr=subprocess.STDOUT))
+
+def pre_sh ():
+    global status
+    execute (status.prefix + '/' + 'pre.sh')
+
+def post_sh ():
+    global status
+    execute (status.prefix + '/' + 'post.sh')
 
 def apply_update (fname):
     # As soon as python-apt closes its opened files on object deletion
@@ -262,8 +278,10 @@ def apply_update (fname):
     # without errors.
     p = Process (target=_apply_update, args=(fname, ))
     with rw_access ("/"):
+        pre_sh ()
         p.start ()
         p.join ()
+        post_sh ()
 
 def log (msg):
 
@@ -309,6 +327,8 @@ def update (upd_file):
     prefix = status.repo_dir + "/" + fname_replace (xml.text ("/project/name"))
     prefix += "_" + fname_replace (xml.text ("/project/version")) + "/"
 
+    status.prefix = prefix
+
     log ("preparing update: " + prefix)
 
     with rw_access (prefix):
@@ -317,7 +337,9 @@ def update (upd_file):
             (dirname, filename) = os.path.split (i)
 
             try:
-                upd_file_z.extract (i, prefix)
+                zi = upd_file_z.getinfo (i)
+                upd_file_z.extract (zi, prefix)
+                os.chmod (prefix + '/' + i, zi.external_attr >> 16)
             except OSError:
                 log ("extraction failed: %s" % sys.exc_info () [1])
                 return
@@ -362,13 +384,16 @@ class FileMonitor (pyinotify.ProcessEvent):
 
         if extension == "gpg":
             fname = unsign_file (event.pathname)
+            os.remove (event.pathname)
             if fname:
                 action_select (fname)
+                os.remove (fname)
             else:
                 log ("checking signature failed: " + event.pathname)
 
         elif status.nosign:
             action_select (event.pathname)
+            os.remove (event.pathname)
         else:
             log ("ignore file: " + str(event.pathname))
 

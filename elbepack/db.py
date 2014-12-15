@@ -143,10 +143,10 @@ class ElbeDB(object):
             elif p.status == "build_done":
                 p.status = "has_changes"
 
-            with open (builddir+"/"+p.version+"-pre.sh", 'w') as dst:
+            with open (builddir+"/pre.sh", 'w') as dst:
                 copyfileobj (presh_file, dst)
 
-            self._update_project_file( s, builddir, p.version+"-pre.sh",
+            self._update_project_file( s, builddir, "pre.sh",
                     "application/sh", "pre install script" )
 
     def set_postsh (self, builddir, postsh_file):
@@ -174,11 +174,11 @@ class ElbeDB(object):
             elif p.status == "build_done":
                 p.status = "has_changes"
 
-            with open (builddir+"/"+p.version+"-pre.sh", 'w') as dst:
+            with open (builddir+"/post.sh", 'w') as dst:
                 copyfileobj (postsh_file, dst)
 
-            self._update_project_file( s, builddir, p.version+"-pre.sh",
-                    "application/sh", "pre install script" )
+            self._update_project_file( s, builddir, "post.sh",
+                    "application/sh", "post install script" )
 
 
     def set_xml (self, builddir, xml_file):
@@ -339,11 +339,36 @@ class ElbeDB(object):
 
 
     def load_project (self, builddir, logpath = None):
+
+        presh_file = None
+        presh_handle = None
+        try:
+            presh_handle = self.get_project_file (builddir, 'pre.sh')
+            presh_file = open (presh_handle.builddir + '/' +
+                    presh_handle.name)
+        except ElbeDBError as e:
+            print str (e)
+        except IOError as e:
+            print str (e)
+
+        postsh_file = None
+        postsh_handle = None
+        try:
+            postsh_handle = self.get_project_file (builddir, 'post.sh')
+            postsh_file = open (postsh_handle.builddir + '/' +
+                    postsh_handle.name)
+        except ElbeDBError as e:
+            print str (e)
+        except IOError as e:
+            print str (e)
+
         with session_scope(self.session) as s:
             try:
                 p = s.query(Project). \
                         filter(Project.builddir == builddir).one()
-                return ElbeProject (p.builddir, name=p.name, logpath=logpath)
+
+                return ElbeProject (p.builddir, name=p.name, logpath=logpath,
+                        presh_file=presh_file, postsh_file=postsh_file)
             except NoResultFound:
                 raise ElbeDBError(
                         "project %s is not registered in the database" %
