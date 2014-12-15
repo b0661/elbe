@@ -173,7 +173,7 @@ def elbe_report( xml, rfs, cache, reportname, targetfs ):
 
     outf.h2( "archive extract after finetuning" )
 
-    if xml.has("archive"):
+    if xml.text("archive"):
         with xml.archive_tmpfile() as fp:
             outf.do( 'tar xvfj "%s" -C "%s"' % (fp.name, targetfs.path) )
         mt_index_post_arch = targetfs.mtime_snap()
