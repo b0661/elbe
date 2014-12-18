@@ -27,7 +27,7 @@ import elbepack
 from elbepack.asciidoclog import ASCIIDocLog, StdoutLog
 from elbepack.treeutils import etree
 from elbepack.validate import validate_xml
-from elbepack.pkgutils import copy_kinitrd, NoKinitrdException, get_project_repo_pkg_list, apt_sources_list, debian_installer_mirror_preseed
+from elbepack.pkgutils import copy_kinitrd, copy_initvm_kinitrdiso, NoKinitrdException, get_project_repo_pkg_list, apt_sources_list, debian_installer_mirror_preseed
 from elbepack.xmldefaults import ElbeDefaults
 from elbepack.version import elbe_version
 from elbepack.templates import write_template, get_initvm_preseed
@@ -161,9 +161,10 @@ def run_command( argv ):
         os.putenv ("no_proxy", "localhost,127.0.0.1")
 
     try:
-        copy_kinitrd(xml.node("/initvm"), out_path, defs, arch="amd64")
-    except NoKinitrdException:
+        copy_initvm_kinitrdiso(xml, out_path, defs)
+    except NoKinitrdException as err:
         print "Failure to download kernel/initrd debian Package"
+        print err
         print "Check Mirror configuration"
         sys.exit(20)
 

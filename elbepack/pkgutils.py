@@ -20,10 +20,14 @@
 
 import os
 import sys
+import platform
+import subprocess
 
 from tempfile import mkdtemp
 from urlparse import urlsplit
 import urllib2
+
+from elbepack.debianreleases import suite2codename, codename2suite
 
 try:
     from elbepack import virtapt
@@ -268,11 +272,77 @@ def get_dsc_size( fname ):
 
     return sz
 
+def copy_initvm_kinitrdiso(xml, target_dir, defs):
+    """ Try to get initrd.gz and vmlinuz and cdrom.iso for initvm.
+    """
+    err = None
+    
+    # suite = oldstable, stable, testing, ...
+    suite = codename2suite[ xml.text("initvm/suite") ]
+    # codename = wheezy, jessie, ...
+    codename = suite2codename[ suite ]
+    arch = platform.machine()
+    if arch == "i686":
+        arch = "i386"
+
+    # default installation cdrom iso.
+    iso_cd_source = "http://cdimage.debian.org/cdimage/weekly-builds/%s/iso-cd/debian-%s-%s-netinst.iso" % (arch, suite, arch)
+    if xml.has("initvm/installer/cdrom.iso"):
+        iso_cd_source = xml.text(key)
+    iso_cd_dest = os.path.join(target_dir, "cdrom.iso")
+
+    # Download cdrom iso.
+    try:
+        response = urllib2.urlopen(iso_cd_source)
+    except urllib2.URLError as err:
+        raise NoKinitrdException( 'Retrieval of %s failed: %s.' % (iso_cd_source, err.reason) )
+        return
+    fd = open( iso_cd_dest, 'wb')
+    fd.write( response.read() )
+    fd.close()
+
+    # Generate a list of files of the cdrom iso image
+    filelist = subprocess.check_output("isoinfo -J -f -i %s" % iso_cd_dest, shell=True)
+    # search for vmlinuz and initrd.gz
+    for line in filelist.splitlines():
+        # exclude typical installer sub dirs
+        if "/gtk/" in line:
+            continue
+        if "/xen/" in line:
+            continue
+        # search
+        if "vmlinuz" in line:
+            iso_path_vmlinuz = line
+        if "initrd.gz" in line:
+            iso_path_initrd = line
+
+    files = (("initvm/installer/initrd.gz", iso_path_initrd, "initrd.gz"), 
+             ("initvm/installer/vmlinuz", iso_path_vmlinuz, "vmlinuz"))
+
+    for key, source_file, dest_file in files:
+        if xml.has(key):
+            source_file = xml.text(key)
+        try:
+            dest_file = os.path.join(target_dir, dest_file)
+            file_content = subprocess.check_output("isoinfo -J -i %s -x %s" % (iso_cd_dest, source_file), shell=True)
+            dest_file = os.path.join(target_dir, dest_file)
+            fd = open( dest_file, 'wb')
+            fd.write( file_content )
+            fd.close()
+        except:
+            raise NoKinitrdException( 'Extraction of %s to %s failed.' % (source_file, dest_file) )
+            return
+
 def copy_kinitrd( prj, target_dir, defs, arch="default" ):
+    if arch == "default":
+        arch  = prj.text("buildimage/arch", default=defs, key="arch")
+    suite = prj.text("suite")
+
     try:
         uri = get_initrd_uri(prj, defs, arch)
     except KeyError:
-        raise NoKinitrdException ('no kinitrd/elbe-bootstrap package available')
+        _copy_kinitrd_from_debian_org(target_dir, suite, arch)
+        # raise NoKinitrdException ('no kinitrd/elbe-bootstrap package available')
         return
     except SystemError:
         raise NoKinitrdException ('a configured mirror is not reachable')

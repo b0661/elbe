@@ -304,6 +304,13 @@
           </documentation>
         </annotation>
       </element>
+      <element name="installer" type="rfs:installer" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+            Installer to be used to create the initvm.
+          </documentation>
+        </annotation>
+      </element>
       <element name="buildtype" type="string" minOccurs="0" maxOccurs="1">
         <annotation>
           <documentation>
@@ -1777,6 +1784,39 @@
         <annotation>
           <documentation>
             A config entry
+          </documentation>
+        </annotation>
+      </element>
+    </sequence>
+  </complexType>
+
+  <complexType name="installer">
+    <annotation>
+      <documentation>
+        Describes the installer components to create an initial debian installation.
+      </documentation>
+    </annotation>
+    <sequence>
+      <element name="initrd.gz" type="string" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Initial root disk to be used for debian installation.
+              The path within the cdrom.iso. Defaults to install.xxx/initrd.gz.
+          </documentation>
+        </annotation>
+      </element>
+      <element name="vmlinuz" type="string" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Linux kernel to be used for debian installation.
+              The path within the cdrom.iso. Defaults to install.xxx/vmlinuz.
+          </documentation>
+        </annotation>
+      </element>
+      <element name="cdrom.iso" type="string" minOccurs="1" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Debian installation CD image. 
           </documentation>
         </annotation>
       </element>

@@ -45,7 +45,9 @@ CLI_NOGRAPHIC=-curses -serial mon:stdio
 
 # Basic qemu options
 CLI_BASE=-no-reboot
-CLI_BASE_INSTALL_INITIAL_CORE_IMAGE=-no-reboot -kernel .elbe-in/vmlinuz -initrd .elbe-gen/initrd-preseeded.gz -append 'root=/dev/$(HD_NAME) debconf_priority=critical console=$(CONSOLE) DEBIAN_FRONTEND=newt'
+CLI_BASE_INSTALL_INITIAL_CORE_IMAGE=-no-reboot -kernel .elbe-in/vmlinuz -initrd .elbe-gen/initrd-preseeded.gz \
+ -drive file=.elbe-in/cdrom.iso,if=$(CDROM_TYPE),media=cdrom,bus=1,unit=1 -boot d \
+ -append 'root=/dev/$(HD_NAME) debconf_priority=critical console=$(CONSOLE) DEBIAN_FRONTEND=newt'
 
 # The machine qemu shall virtualize
 CLI_MACHINE=-M $(MACHINE) -m $(MEMSIZE) -smp $(SMP) -usb
@@ -53,7 +55,7 @@ CLI_MACHINE=-M $(MACHINE) -m $(MEMSIZE) -smp $(SMP) -usb
 # Drive images
 CLI_HDD=-drive file=buildenv.img,if=$(HD_TYPE),bus=1,unit=0 \
 % if prj.has("mirror/cdrom"):
- -drive file=${prj.text("mirror/cdrom")},if=$(CDROM_TYPE),media=cdrom,bus=1,unit=1 \
+ -drive file=${prj.text("mirror/cdrom")},if=$(CDROM_TYPE),media=cdrom,bus=1,unit=2 \
 % endif
 
 # Networking
