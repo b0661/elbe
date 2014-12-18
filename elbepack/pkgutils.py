@@ -288,7 +288,7 @@ def copy_initvm_kinitrdiso(xml, target_dir, defs):
     # default installation cdrom iso.
     iso_cd_source = "http://cdimage.debian.org/cdimage/weekly-builds/%s/iso-cd/debian-%s-%s-netinst.iso" % (arch, suite, arch)
     if xml.has("initvm/installer/cdrom.iso"):
-        iso_cd_source = xml.text(key)
+        iso_cd_source = xml.text("initvm/installer/cdrom.iso")
     iso_cd_dest = os.path.join(target_dir, "cdrom.iso")
 
     # Download cdrom iso.
@@ -341,8 +341,7 @@ def copy_kinitrd( prj, target_dir, defs, arch="default" ):
     try:
         uri = get_initrd_uri(prj, defs, arch)
     except KeyError:
-        _copy_kinitrd_from_debian_org(target_dir, suite, arch)
-        # raise NoKinitrdException ('no kinitrd/elbe-bootstrap package available')
+        raise NoKinitrdException ('no kinitrd/elbe-bootstrap package available')
         return
     except SystemError:
         raise NoKinitrdException ('a configured mirror is not reachable')
