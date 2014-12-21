@@ -53,16 +53,16 @@ if [ -d "/target" ]; then
 
   # Create a place for elbe
   mkdir -p /buildenv/var/cache/elbe/
-  
+
   echo "--- Elbe init - 1st stage ---" >/buildenv$LOGFILE
-  
+
   # Copy this script to make it an init script to be used on next boot
   cp /init-elbe.sh /buildenv$SCRIPTNAME >>/buildenv$LOGFILE 2>&1
   chmod 755 /buildenv$SCRIPTNAME >>/buildenv$LOGFILE 2>&1
-  
+
   # Activate the init script
   in-target update-rc.d $NAME defaults
-  
+
   # Prepare to share elbe repository.
   ELBE_INIT_REPO_DIR=/buildenv$ELBE_REPO_DIR
   mkdir -p $ELBE_INIT_REPO_DIR >>/buildenv$LOGFILE 2>&1
@@ -89,8 +89,18 @@ fi
 if [ ! -f "/usr/bin/elbe" ]; then
   # elbe is not installed, we assume the script is called the first time from initd or systemd or upstart.
   # see Makefile.mako .stamps/stamp-install-initial-image
-  
+
   echo "--- Elbe init - 2nd stage ---" >>$LOGFILE
+
+  # -----------------
+  # Prepare for unattended update/install
+  # -----------------
+  export DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical
+
+  # -----------------
+  # Assure aptitude (and yes) is available for further install work.
+  # -----------------
+  apt-get install -q -y aptitude yes >>$LOGFILE 2>&1
 
   # -----------------
   # Clone any directories to be cloned.
@@ -132,27 +142,24 @@ if [ ! -f "/usr/bin/elbe" ]; then
   # -----------------
   # Enable shared repo for elbe project
   # -----------------
-  
+
   # Make root the owner of the project repository (Elbe share security is mapped -> no effect on host).
   chgrp -R root $ELBE_REPO_DIR >>$LOGFILE 2>&1
   chown -R root $ELBE_REPO_DIR >>$LOGFILE 2>&1
-  
+
   # Prepend repo to apt sources.list to give it the highest priority.
   TMP_SOURCES_LIST=/tmp/sources.list
   echo "${apt_sources_list}" >$TMP_SOURCES_LIST
   cat /etc/apt/sources.list >>$TMP_SOURCES_LIST 2>>$LOGFILE
   cp $TMP_SOURCES_LIST /etc/apt/sources.list >>$LOGFILE 2>&1
-  
-  # Prepare for unattended update/install
-  export DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical
-  
+
   # Make all known to aptitude
   aptitude update -q >>$LOGFILE 2>&1
-  
+
   # Try to solve any package conflicts and do a full upgrade
   yes "Yes" | aptitude full-upgrade -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
   2>>$LOGFILE
-  
+
   # -----------------
   # Install any additional packages (including the elbe build environment)
   # Note: Must be done after the project repo is enabled.
@@ -160,7 +167,7 @@ if [ ! -f "/usr/bin/elbe" ]; then
   # -----------------
 
   yes "Yes" | aptitude install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-  elbe-buildenv elbe-daemon elbe-soap openssh-client qemu-elbe-user-static rsync \
+  elbe-buildenv elbe-daemon elbe-soap openssh-client qemu-elbe-user-static \
 % for n in pkgs:
 % if n.tag == "pkg":
     ${n.text(".")} \
@@ -168,7 +175,7 @@ if [ ! -f "/usr/bin/elbe" ]; then
 % endfor
   2>>$LOGFILE
 
-  
+
 % if xml.has('target'):
   echo -n "running elbe buildchroot .. /var/cache/elbe/source.xml ..." >>$LOGFILE
   elbe buildchroot \
@@ -196,7 +203,7 @@ if [ ! -f "/usr/bin/elbe" ]; then
     cp /var/cache/elbe/elbe-report.log $ELBE_SHARE_DIR/elbe-report.log
     sync
     shutdown -h now >>$LOGFILE 2>&1
-    
+
     exit 0
   fi 
 fi
