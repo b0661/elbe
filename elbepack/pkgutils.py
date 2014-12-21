@@ -284,6 +284,8 @@ def copy_initvm_kinitrdiso(xml, target_dir, defs):
     arch = platform.machine()
     if arch == "i686":
         arch = "i386"
+    if arch == "x86_64":
+        arch = "amd64"
 
     # default installation cdrom iso.
     iso_cd_source = "http://cdimage.debian.org/cdimage/weekly-builds/%s/iso-cd/debian-%s-%s-netinst.iso" % (arch, suite, arch)
