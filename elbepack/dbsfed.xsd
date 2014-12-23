@@ -304,6 +304,13 @@
           </documentation>
         </annotation>
       </element>
+      <element name="interpreter" type="string" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+            Virtual machine interpreter to be used for the initvm, e.g. "kvm", "qemu-system-arm", ...
+          </documentation>
+        </annotation>
+      </element>
       <element name="installer" type="rfs:installer" minOccurs="0" maxOccurs="1">
         <annotation>
           <documentation>

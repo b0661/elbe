@@ -17,10 +17,11 @@
 # along with ELBE.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import platform
 import urllib
 from urlparse import urlparse,urlunparse
 import mimetypes
-from elbepack.debianreleases import codename2suite
+from elbepack.debianreleases import codename2suite, machine2arch
 from elbepack.filesystem import Filesystem
 from elbepack.pkgutils import get_dsc_size
 
@@ -156,9 +157,10 @@ class ProjectRepo(RepoBase):
     def __init__( self, xml, path, log ):
         self.xml  = xml
 
-        codename = xml.text("project/suite")
+        codename = xml.text("initvm/suite")
+        arch = machine2arch[platform.machine()]
 
-        RepoBase.__init__( self, path, log, "amd64 source", codename, "Elbe", "Elbe Project Repo", "main")
+        RepoBase.__init__( self, path, log, "%s source" % arch, codename, "Elbe", "Elbe Project Repo", "main")
 
 class ToolchainRepo(RepoBase):
     def __init__( self, arch, codename, path, log):

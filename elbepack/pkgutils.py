@@ -27,7 +27,7 @@ from tempfile import mkdtemp
 from urlparse import urlsplit
 import urllib2
 
-from elbepack.debianreleases import suite2codename, codename2suite
+from elbepack.debianreleases import suite2codename, codename2suite, machine2arch, installer_cdrom
 
 try:
     from elbepack import virtapt
@@ -272,25 +272,35 @@ def get_dsc_size( fname ):
 
     return sz
 
-def copy_initvm_kinitrdiso(xml, target_dir, defs):
-    """ Try to get initrd.gz and vmlinuz and cdrom.iso for initvm.
+def copy_kinitrdiso(xml, target_dir, defs):
+    """ Get cdrom.iso for a debian suite and architecture and extract the vmlinuz and initrd.gz from it.
+    Expects xml node suite.
+    Optional uses xml node interpreter
+    Optional uses xml node installer
     """
     err = None
     
     # suite = oldstable, stable, testing, ...
-    suite = codename2suite[ xml.text("initvm/suite") ]
+    suite = codename2suite[ xml.text("suite") ]
     # codename = wheezy, jessie, ...
     codename = suite2codename[ suite ]
-    arch = platform.machine()
-    if arch == "i686":
-        arch = "i386"
-    if arch == "x86_64":
-        arch = "amd64"
+    # Try to deduce architecture
+    arch = None
+    if xml.has("installer/cdrom.iso"):
+        for arch_check in ('i386', 'amd64', 'armel'):
+            if arch_check in xml.text("installer/cdrom.iso"):
+                arch = arch_check
+                break
+    if not arch and xml.has("interpreter"):
+        # TODO
+        pass
+    if not arch:
+        arch = machine2arch[ platform.machine() ]
 
     # default installation cdrom iso.
-    iso_cd_source = "http://cdimage.debian.org/cdimage/weekly-builds/%s/iso-cd/debian-%s-%s-netinst.iso" % (arch, suite, arch)
-    if xml.has("initvm/installer/cdrom.iso"):
-        iso_cd_source = xml.text("initvm/installer/cdrom.iso")
+    iso_cd_source = installer_cdrom(xml.text("suite"), arch)
+    if xml.has("installer/cdrom.iso"):
+        iso_cd_source = xml.text("installer/cdrom.iso")
     iso_cd_dest = os.path.join(target_dir, "cdrom.iso")
 
     # Download cdrom iso.
@@ -318,8 +328,8 @@ def copy_initvm_kinitrdiso(xml, target_dir, defs):
         if "initrd.gz" in line:
             iso_path_initrd = line
 
-    files = (("initvm/installer/initrd.gz", iso_path_initrd, "initrd.gz"), 
-             ("initvm/installer/vmlinuz", iso_path_vmlinuz, "vmlinuz"))
+    files = (("installer/initrd.gz", iso_path_initrd, "initrd.gz"), 
+             ("installer/vmlinuz", iso_path_vmlinuz, "vmlinuz"))
 
     for key, source_file, dest_file in files:
         if xml.has(key):

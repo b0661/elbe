@@ -31,3 +31,33 @@ suite2codename = { 'oldstable': 'squeeze',
 
 # generate reverse mapping
 codename2suite = dict( [(v,k) for k,v in suite2codename.items()] )
+
+machine2arch = { 'i386': 'i386',
+                 'i686': 'i386',
+                 'x86_64': 'amd64',
+                 
+                 # map arch on itself, just in case
+                 'amd64': 'amd64',
+               }
+
+def installer_cdrom(suite, arch):
+    """ Default uri of the installer cdrom iso for the suite and architecture.
+    """
+    if suite in ('oldstable', 'stable', 'testing', 'unstable'):
+        codename = suite2codename[ suite ]
+    else:
+        codename = suite
+        suite = codename2suite[ codename ]
+    arch = machine2arch[ arch ]
+    installer_iso = None
+
+    if suite == 'unstable':
+        pass
+    elif suite == 'testing':
+        installer_iso = "http://cdimage.debian.org/cdimage/weekly-builds/%s/iso-cd/debian-%s-%s-netinst.iso" % (arch, suite, arch)
+    elif suite == 'stable':
+        installer_iso = "http://cdimage.debian.org/debian-cd/current/%s/iso-cd/debian-7.7.0-%s-netinst.iso" % (arch, arch)
+    elif suite == 'oldstable':
+        pass
+
+    return installer_iso
