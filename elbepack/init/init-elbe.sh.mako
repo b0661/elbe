@@ -167,7 +167,7 @@ if [ ! -f "/usr/bin/elbe" ]; then
   # -----------------
 
   yes "Yes" | aptitude install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-  elbe-buildenv elbe-daemon elbe-soap openssh-client qemu-elbe-user-static \
+  string rng-tools btrfs-tools openssh-client elbe-soap elbe-buildenv qemu-elbe-user-static \
 % for n in pkgs:
 % if n.tag == "pkg":
     ${n.text(".")} \

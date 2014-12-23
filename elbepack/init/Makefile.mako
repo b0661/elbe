@@ -50,7 +50,7 @@ CLI_BASE_INSTALL_INITIAL_CORE_IMAGE=-no-reboot -kernel .elbe-in/vmlinuz -initrd 
  -append 'root=/dev/$(HD_NAME) debconf_priority=critical console=$(CONSOLE) DEBIAN_FRONTEND=newt'
 
 # The machine qemu shall virtualize
-CLI_MACHINE=-M $(MACHINE) -m $(MEMSIZE) -smp $(SMP) -usb
+CLI_MACHINE=-M $(MACHINE) -m $(MEMSIZE) -smp $(SMP) -usb -device virtio-rng-pci
 
 # Drive images
 CLI_HDD=-drive file=buildenv.img,if=$(HD_TYPE),bus=1,unit=0 \
