@@ -161,7 +161,7 @@ def run_command( argv ):
         os.putenv ("no_proxy", "localhost,127.0.0.1")
 
     try:
-        copy_kinitrdiso(xml.node("/initvm", out_path, defs)
+        copy_kinitrdiso(xml.node("/initvm"), out_path, defs)
     except NoKinitrdException as err:
         print "Failure to download kernel/initrd debian Package"
         print err

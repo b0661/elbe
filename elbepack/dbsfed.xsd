@@ -405,7 +405,7 @@
       <element name="clone-list" type="rfs:clone-list" minOccurs="0" maxOccurs="1">
         <annotation>
           <documentation>
-          Directories that are cloned from the host to the initvm/ build environment.
+          Directories that are cloned from the host to the initvm environment.
           </documentation>
         </annotation>
       </element>

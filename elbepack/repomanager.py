@@ -21,7 +21,7 @@ import platform
 import urllib
 from urlparse import urlparse,urlunparse
 import mimetypes
-from elbepack.debianreleases import codename2suite, machine2arch
+from elbepack.debianreleases import codename2suite, codename_suite, installer_arch
 from elbepack.filesystem import Filesystem
 from elbepack.pkgutils import get_dsc_size
 
@@ -157,8 +157,8 @@ class ProjectRepo(RepoBase):
     def __init__( self, xml, path, log ):
         self.xml  = xml
 
-        codename = xml.text("initvm/suite")
-        arch = machine2arch[platform.machine()]
+        codename, suite = codename_suite( xml.text("initvm/suite") )
+        arch = installer_arch( suite, platform.machine() )
 
         RepoBase.__init__( self, path, log, "%s source" % arch, codename, "Elbe", "Elbe Project Repo", "main")
 

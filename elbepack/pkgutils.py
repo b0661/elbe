@@ -22,12 +22,12 @@ import os
 import sys
 import platform
 import subprocess
+import urllib2
 
 from tempfile import mkdtemp
 from urlparse import urlsplit
-import urllib2
 
-from elbepack.debianreleases import suite2codename, codename2suite, machine2arch, installer_cdrom
+from elbepack.debianreleases import suite2codename, codename2suite, installer_cdrom, installer_arch
 
 try:
     from elbepack import virtapt
@@ -273,32 +273,49 @@ def get_dsc_size( fname ):
     return sz
 
 def copy_kinitrdiso(xml, target_dir, defs):
-    """ Get cdrom.iso for a debian suite and architecture and extract the vmlinuz and initrd.gz from it.
+    """ Get cdrom.iso for a debian/ ubuntu suite and architecture and extract the vmlinuz and initrd.gz from it.
     Expects xml node suite.
     Optional uses xml node interpreter
     Optional uses xml node installer
+    Optional uses xml node buildimage/arch
     """
-    err = None
-    
-    # suite = oldstable, stable, testing, ...
-    suite = codename2suite[ xml.text("suite") ]
-    # codename = wheezy, jessie, ...
-    codename = suite2codename[ suite ]
+
     # Try to deduce architecture
     arch = None
-    if xml.has("installer/cdrom.iso"):
-        for arch_check in ('i386', 'amd64', 'armel'):
-            if arch_check in xml.text("installer/cdrom.iso"):
-                arch = arch_check
-                break
-    if not arch and xml.has("interpreter"):
-        # TODO
-        pass
-    if not arch:
-        arch = machine2arch[ platform.machine() ]
+    interpreter = None
+    board = None
+    if xml.has('buildimage'):
+        # xml is /project
+        if xml.has('buildimage/arch'):
+            arch = xml.text('buildimage/arch')
+        elif xml.has('buildtype'):
+            arch = xml.text('buildtype')
+        else:
+            if xml.has('buildimage/interpreter'):
+                interpreter = xml.text("buildimage/interpreter").split('-')
+            if xml.has('buildimage/machine'):
+                board = xml.text('buildimage/machine')
+    else:
+        # xml is /initvm 
+        if xml.has("installer/cdrom.iso"):
+            for arch_check in ('i386', 'amd64', 'armel'):
+                if arch_check in xml.text("installer/cdrom.iso"):
+                    arch = arch_check
+                    break
+        if arch is None and xml.has('interpreter'):
+            interpreter = xml.text("interpreter").split('-')
+    if arch is None and interpreter:
+        # Maybe the interpreter is qemu-system-[arch]
+        if interpreter[0] == 'qemu' and interpreter[1] == 'system':
+            arch = installer_arch(xml.text("suite"), interpreter[2], board)
+    if arch is None:
+        try:
+            arch = installer_arch(xml.text("suite"), platform.machine() )
+        except:
+            arch = None
 
     # default installation cdrom iso.
-    iso_cd_source = installer_cdrom(xml.text("suite"), arch)
+    iso_cd_source = installer_cdrom(xml.text("suite"), arch)    
     if xml.has("installer/cdrom.iso"):
         iso_cd_source = xml.text("installer/cdrom.iso")
     iso_cd_dest = os.path.join(target_dir, "cdrom.iso")
