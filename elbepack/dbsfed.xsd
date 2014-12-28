@@ -397,8 +397,7 @@
       <element name="share-list" type="rfs:share-list" minOccurs="0" maxOccurs="1">
         <annotation>
           <documentation>
-          Directory paths that are shared between the initvm/ build environment and the host.
-          From the initvm/ build environment the share may be accessed by /media/[id]
+          Directory paths that are shared between the initvm environment and the host.
           </documentation>
         </annotation>
       </element>
@@ -622,6 +621,13 @@
           <documentation>
             additional packages that are only installed into the
             build environment; not into the target root filesystem.
+          </documentation>
+        </annotation>
+      </element>
+      <element name="share-list" type="rfs:share-list" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+          Directory paths that are shared between the build environment environment and the initvm.
           </documentation>
         </annotation>
       </element>
@@ -1841,15 +1847,21 @@
         <annotation>
           <documentation>
               Identifier of the shared directory.
-              Becomes the initvm/ build environment path to the share.
-              E.g. /media/[id]
           </documentation>
         </annotation>
       </element>
-      <element name="host-path" type="string" minOccurs="1" maxOccurs="1">
+      <element name="source" type="string" minOccurs="1" maxOccurs="1">
         <annotation>
           <documentation>
-              Host path to shared directory. 
+              Path to directory to be shared. Directory is in source environment. 
+          </documentation>
+        </annotation>
+      </element>
+      <element name="mountpoint" type="string" minOccurs="0" maxOccurs="1">
+        <annotation>
+          <documentation>
+              Path to directory to mount shared directory to. Directory is in destination environment.
+              In case the mount point in the destination environment is not specified it becomes /media/[id].
           </documentation>
         </annotation>
       </element>

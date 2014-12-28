@@ -72,8 +72,13 @@ if [ -d "/target" ]; then
   # Prepare later mount of shared directories
 % if prj.has("share-list"):
 %    for share in prj.node("share-list"):
+%        if share.has("mountpoint"):
+  mkdir -p /buildenv/${share.text("mountpoint")} >>/buildenv$LOGFILE 2>&1
+  echo -e "${share.text("id")}\t/${share.text("mountpoint")}\t9p\ttrans=virtio,version=9p2000.L,rw\t0\t0" >>/target/etc/fstab 2>>/buildenv$LOGFILE
+%        else:
   mkdir -p /buildenv/media/${share.text("id")} >>/buildenv$LOGFILE 2>&1
   echo -e "${share.text("id")}\t/media/${share.text("id")}\t9p\ttrans=virtio,version=9p2000.L,rw\t0\t0" >>/target/etc/fstab 2>>/buildenv$LOGFILE
+%        endif
 %    endfor
 % endif
 
@@ -167,7 +172,7 @@ if [ ! -f "/usr/bin/elbe" ]; then
   # -----------------
 
   yes "Yes" | aptitude install -q -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-  string rng-tools btrfs-tools openssh-client elbe-soap elbe-buildenv qemu-elbe-user-static \
+  string rng-tools btrfs-tools openssh-client elbe-soap elbe-buildenv qemu-user-static \
 % for n in pkgs:
 % if n.tag == "pkg":
     ${n.text(".")} \

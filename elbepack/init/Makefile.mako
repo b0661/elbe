@@ -74,9 +74,9 @@ CLI_SHARED_DIR=-fsdev local,security_model=mapped,id=fsdev0,path=$(REPO_DIR) \
 %    for share in prj.node("share-list"):
 <%
          share_num += 1 
-         share_host_path = os.path.abspath(share.text("host-path")) 
+         share_source_path = os.path.abspath(share.text("source")) 
 %>\
- -fsdev local,security_model=mapped,id=fsdev${share_num},path=${share_host_path} \
+ -fsdev local,security_model=mapped,id=fsdev${share_num},path=${share_source_path} \
  -device virtio-9p-pci,id=fs${share_num},fsdev=fsdev${share_num},mount_tag=${share.text("id")} \
 %    endfor
 % endif

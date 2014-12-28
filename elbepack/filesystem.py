@@ -28,6 +28,7 @@ from elbepack.asciidoclog import CommandError
 from elbepack.version import elbe_version
 from elbepack.hdimg import do_hdimg
 from elbepack.fstab import fstabentry, Fstab, FstabLine
+from elbepack.elbexml import ElbeXML
 
 class Filesystem(object):
     def __init__(self, path, clean=False):
@@ -327,28 +328,31 @@ class ChRootFilesystem(Filesystem):
                                      self.fname ("etc/apt/apt.conf")))
             
     def __mount_shared_directories(self):
-        ''' Mount the directories that are shared from the host.
+        ''' Mount the directories that are shared with the initvm.
 
-        Shared directories are identified by the 9p file system type of the initvm /etc/fstab.
+        Shared directories are identified from etc/elbe_base.xml of the chroot rfs.
         '''
-        initvm_fstab = Fstab()
-        
-        initvm_fstab.read("/etc/fstab")
-        
+        xmlpath = os.path.join( self.path, "etc", "elbe_base.xml" )
+        xml = ElbeXML( xmlpath )
         self.__shared_directories = []
-        for line in initvm_fstab.lines:
-            if line.has_filesystem() and line.fstype == "9p":
-                shared_mountpoint = "%s/media/%s" % (self.path, line.label)
-                if not os.path.isdir(shared_mountpoint):
-                    os.makedirs(shared_mountpoint)
-                os.system ("mount -o bind %s %s" % (line.mountpoint, shared_mountpoint))
-                self.__shared_directories.append(shared_mountpoint)
+
+        if xml.has("project/buildimage/share-list"):
+            for share in self.xml.node("project/buildimage/share-list"):
+                share_source_path = os.path.abspath(share.text("source"))
+                if share.has("mountpoint"):
+                    share_mointpoint = os.path.join( self.path, share.text("mountpoint") )
+                else:
+                    share_mountpoint = os.path.join( self.path, "media", share.text("id") )
+                if not os.path.isdir(share_mountpoint):
+                    os.makedirs(share_mountpoint)
+                os.system ("mount -o bind %s %s" % (share_source_path, share_mountpoint))
+                self.__shared_directories.append(share_mountpoint)
         
     def __umount_shared_directories(self):
-        ''' Unmount the directories that are shared from the host.
+        ''' Unmount the directories that are shared with the initvm.
         '''
-        for shared_mountpoint in self.__shared_directories:
-            self._umount (shared_mountpoint)
+        for share_mountpoint in self.__shared_directories:
+            self._umount( share_mountpoint )
 
     def mount(self):
         if self.path == '/':
