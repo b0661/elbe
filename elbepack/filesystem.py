@@ -342,7 +342,7 @@ class ChRootFilesystem(Filesystem):
                     share_source_path = os.path.abspath(share.text("source"))
                     share_mountpoint = os.path.join( "media", share.text("id") )
                     if share.has("mountpoint"):
-                        share_mointpoint = share.text("mountpoint")
+                        share_mountpoint = share.text("mountpoint")
                     if not self.isdir( share_mountpoint ):
                         self.mkdir_p( share_mountpoint )
                     os.system ("mount -o bind %s %s" % (share_source_path, self.fname( share_mountpoint )))
